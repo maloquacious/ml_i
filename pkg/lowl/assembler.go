@@ -290,9 +290,35 @@ func Assemble(name string) (*VM, *bytes.Buffer, error) {
 			}
 			vm.core[vm.pc], vm.pc = word, vm.pc+1
 		case "GOLE":
-			vm.core[vm.pc], vm.pc = Word{op: op.GOLE}, vm.pc+1
+			word := Word{op: op.GOLE}
+			// GOLE * label spec
+			if len(parameters) < 1 {
+				return nil, listing, fmt.Errorf("%d: %s: want 2 args: got %d", line, opc, len(parameters))
+			}
+			vName := parameters[0]
+			if sym, ok := symtab.getUnaliasedSymbol(vName); !ok || sym.kind == SymIsBackfill {
+				symtab.refVariable(sym.name, vm.pc) // operand to be back-filled
+			} else if sym.kind == SymIsAddress {
+				word.data = WORD(sym.address) // operand is the variable address
+			} else {
+				return nil, listing, fmt.Errorf("%d: %s %q: invalid", line, opc, vName)
+			}
+			vm.core[vm.pc], vm.pc = word, vm.pc+1
 		case "GOLT":
-			vm.core[vm.pc], vm.pc = Word{op: op.GOLT}, vm.pc+1
+			word := Word{op: op.GOLT}
+			// GOLT * label spec
+			if len(parameters) < 1 {
+				return nil, listing, fmt.Errorf("%d: %s: want 2 args: got %d", line, opc, len(parameters))
+			}
+			vName := parameters[0]
+			if sym, ok := symtab.getUnaliasedSymbol(vName); !ok || sym.kind == SymIsBackfill {
+				symtab.refVariable(sym.name, vm.pc) // operand to be back-filled
+			} else if sym.kind == SymIsAddress {
+				word.data = WORD(sym.address) // operand is the variable address
+			} else {
+				return nil, listing, fmt.Errorf("%d: %s %q: invalid", line, opc, vName)
+			}
+			vm.core[vm.pc], vm.pc = word, vm.pc+1
 		case "GOND":
 			vm.core[vm.pc], vm.pc = Word{op: op.GOND}, vm.pc+1
 		case "GONE":
@@ -313,7 +339,28 @@ func Assemble(name string) (*VM, *bytes.Buffer, error) {
 		case "GOPC":
 			vm.core[vm.pc], vm.pc = Word{op: op.GOPC}, vm.pc+1
 		case "GOSUB":
-			vm.core[vm.pc], vm.pc = Word{op: op.GOSUB}, vm.pc+1
+			word := Word{op: op.GOSUB}
+			// GOSUB subroutine name,(distance)
+			// GOSUB subroutine name,(X)
+			if len(parameters) < 3 {
+				return nil, listing, fmt.Errorf("%d: %s: want 2 args: got %d", line, opc, len(parameters))
+			}
+			vName, flag := parameters[0], parameters[2]
+			switch flag {
+			case "X": // reference a routine in the MD-logic
+				symtab.refVariable(vName, vm.pc) // operand to be back-filled
+			default: // flag must be a number
+				if flag == "-" { // might be a negative number
+					for _, parm := range parameters[3:] {
+						flag = flag + parm
+					}
+				}
+				if _, err := strconv.Atoi(flag); err != nil {
+					return nil, listing, fmt.Errorf("%d: %s: unknown flag %q", line, opc, flag)
+				}
+				symtab.refVariable(vName, vm.pc) // operand to be back-filled
+			}
+			vm.core[vm.pc], vm.pc = word, vm.pc+1
 		case "IDENT":
 			// IDENT V,decimal integer
 			if len(parameters) < 3 {
@@ -576,10 +623,10 @@ func Assemble(name string) (*VM, *bytes.Buffer, error) {
 	for name, addresses := range symtab.backfill {
 		sym, ok := symtab.table[name]
 		if !ok {
-			panic("!defined")
+			panic(fmt.Sprintf("assert(%q is defined)", name))
 		} else if sym.kind == SymIsAlias {
 			if sym, ok = symtab.table[sym.aliasOf]; !ok {
-				panic("bad-alias")
+				panic(fmt.Sprintf("%q is bad alias", name))
 			}
 		}
 		for _, address := range addresses {

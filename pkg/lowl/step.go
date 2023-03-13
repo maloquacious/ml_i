@@ -97,10 +97,16 @@ func (vm *VM) step() bool {
 			vm.pc = ADDR(c.data)
 		}
 		return ok
-	case op.GOLE:
-		panic(c.op.String()) // branch if less than or equal
-	case op.GOLT:
-		panic(c.op.String()) // branch if less than
+	case op.GOLE: // branch if less than or equal
+		if !(vm.cmpa == IS_GR) {
+			vm.pc = ADDR(c.data)
+		}
+		return ok
+	case op.GOLT: // branch if less than
+		if vm.cmpa == IS_LT {
+			vm.pc = ADDR(c.data)
+		}
+		return ok
 	case op.GOND:
 		panic(c.op.String()) // branch if C is not a digit; otherwise put value in A
 	case op.GONE: // branch if not equal
