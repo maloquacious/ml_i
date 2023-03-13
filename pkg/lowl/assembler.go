@@ -612,6 +612,7 @@ func Assemble(name string) (*VM, *bytes.Buffer, error) {
 			vm.core[vm.pc], vm.pc = word, vm.pc+1
 		case "SUBR":
 			vm.core[vm.pc], vm.pc = Word{op: op.SUBR}, vm.pc+1
+			panic("SUBR must be implemented!")
 		case "UNSTK":
 			vm.core[vm.pc], vm.pc = Word{op: op.UNSTK}, vm.pc+1
 		default:
