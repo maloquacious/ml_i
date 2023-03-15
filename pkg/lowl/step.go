@@ -71,8 +71,27 @@ func (vm *VM) step() bool {
 		panic(c.op.String()) // declare variable
 	case op.EQU:
 		panic(c.op.String()) // equate two variables
-	case op.EXIT:
-		panic(c.op.String()) // exit from subroutine
+	case op.EXIT: // exit from subroutine
+		fmt.Printf("exit %3d  pc %8d  rs %v\n", c.data, vm.pc, vm.rs)
+		vm.pc, vm.rs = vm.rs[len(vm.rs)-1]+ADDR(c.data), vm.rs[:len(vm.rs)-1]
+		fmt.Printf("exit %3d  pc %8d  rs %v\n", c.data, vm.pc, vm.rs)
+		return ok
+	case op.EXITEQ:
+		panic(c.op.String())
+	case op.EXITGE:
+		panic(c.op.String())
+	case op.EXITGR:
+		panic(c.op.String())
+	case op.EXITLE:
+		panic(c.op.String())
+	case op.EXITLT:
+		panic(c.op.String())
+	case op.EXITND:
+		panic(c.op.String())
+	case op.EXITNE:
+		panic(c.op.String())
+	case op.EXITPC:
+		panic(c.op.String())
 	case op.FMOVE:
 		panic(c.op.String()) // forwards block move
 	case op.FSTK:
@@ -116,8 +135,10 @@ func (vm *VM) step() bool {
 		return ok
 	case op.GOPC:
 		panic(c.op.String()) // branch if C is a punctuation character
-	case op.GOSUB:
-		panic(c.op.String()) // call subroutine
+	case op.GOSUB: // call subroutine
+		vm.rs = append(vm.rs, vm.pc) // push pc onto the return stack
+		vm.pc = ADDR(c.data)         // jump to the sub-routine
+		return ok
 	case op.IDENT:
 		panic(c.op.String()) // equate name to integer
 	case op.LAA:
@@ -140,6 +161,10 @@ func (vm *VM) step() bool {
 		panic(c.op.String()) // load C modified
 	case op.LCN:
 		panic(c.op.String()) // load C with named character
+	case op.MDERCH:
+		panic(c.op.String()) // output register C to message stream
+	case op.MDQUIT:
+		panic(c.op.String()) // quit the application
 	case op.MESS: // output a message to a stream
 		fmt.Print(vm.heaps.msg[int(c.data)])
 		return ok

@@ -17,7 +17,11 @@ type SYMBOL struct {
 	// alias information
 	aliasOf string
 	// INDEX in the heap for variables
-	heapIndex int
+	heapIndex  int
+	subroutine struct {
+		pName   string // optional name of parameter variable
+		noExits int    // number of exits
+	}
 	// value for constants
 	value WORD
 }
@@ -27,12 +31,13 @@ type SYMBOLKIND int
 
 // enums for SYMBOLKIND
 const (
-	SymIsUnknown  SYMBOLKIND = iota // never seen, never defined
-	SymIsAddress                    // address in memory
-	SymIsAlias                      // alias for another symbol
-	SymIsBackfill                   // used but not yet defined
-	SymIsOnHeap                     // address on the heap
-	SymIsValue                      // a constant value
+	SymIsUnknown    SYMBOLKIND = iota // never seen, never defined
+	SymIsAddress                      // address in memory
+	SymIsAlias                        // alias for another symbol
+	SymIsBackfill                     // used but not yet defined
+	SymIsOnHeap                       // address on the heap
+	SymIsSubroutine                   // subroutine with optional parameter
+	SymIsValue                        // a constant value
 )
 
 func newSymbolTable() *SymbolTable {
@@ -95,6 +100,27 @@ func (st *SymbolTable) defLabel(name string, line int, addr ADDR) error {
 		line:    line,
 		kind:    SymIsAddress,
 		address: addr,
+	}
+	return nil
+}
+
+// defSubroutine defines a new subroutine
+func (st *SymbolTable) defSubroutine(name string, line int, addr ADDR, pName string, noExits int) error {
+	if _, ok := st.table[name]; ok {
+		return fmt.Errorf("redefined")
+	}
+	st.table[name] = SYMBOL{
+		name:    name,
+		line:    line,
+		kind:    SymIsSubroutine,
+		address: addr,
+		subroutine: struct {
+			pName   string
+			noExits int
+		}{
+			pName:   pName,
+			noExits: noExits,
+		},
 	}
 	return nil
 }

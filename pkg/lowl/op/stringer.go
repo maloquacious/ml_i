@@ -1,0 +1,164 @@
+/*
+ * Copyright (c) 2023 Michael D Henderson. All rights reserved.
+ */
+
+package op
+
+import "fmt"
+
+// String implements the Stringer interface.
+// Returns the mnemonic for known op codes, and the hex code for unknown op codes.
+func (op Code) String() string {
+	switch op {
+	case AAL:
+		return "AAL"
+	case AAV:
+		return "AAV"
+	case ABV:
+		return "ABV"
+	case ALIGN:
+		return "ALIGN"
+	case ANDL:
+		return "ANDL"
+	case ANDV:
+		return "ANDV"
+	case BMOVE:
+		return "BMOVE"
+	case BSTK:
+		return "BSTK"
+	case BUMP:
+		return "BUMP"
+	case CAI:
+		return "CAI"
+	case CAL:
+		return "CAL"
+	case CAV:
+		return "CAV"
+	case CCI:
+		return "CCI"
+	case CCL:
+		return "CCL"
+	case CCN:
+		return "CCN"
+	case CFSTK:
+		return "CFSTK"
+	case CLEAR:
+		return "CLEAR"
+	case CON:
+		return "CON"
+	case CSS:
+		return "CSS"
+	case DCL:
+		return "DCL"
+	case EQU:
+		return "EQU"
+	case EXIT:
+		return "EXIT"
+	case EXITEQ:
+		return "EXITEQ"
+	case EXITGE:
+		return "EXITGE"
+	case EXITGR:
+		return "EXITGR"
+	case EXITLE:
+		return "EXITLE"
+	case EXITLT:
+		return "EXITLT"
+	case EXITND:
+		return "EXITND"
+	case EXITNE:
+		return "EXITNE"
+	case EXITPC:
+		return "EXITPC"
+	case FMOVE:
+		return "FMOVE"
+	case FSTK:
+		return "FSTK"
+	case GO:
+		return "GO"
+	case GOADD:
+		return "GOADD"
+	case GOEQ:
+		return "GOEQ"
+	case GOGE:
+		return "GOGE"
+	case GOGR:
+		return "GOGR"
+	case GOLE:
+		return "GOLE"
+	case GOLT:
+		return "GOLT"
+	case GOND:
+		return "GOND"
+	case GONE:
+		return "GONE"
+	case GOPC:
+		return "GOPC"
+	case GOSUB:
+		return "GOSUB"
+	case IDENT:
+		return "IDENT"
+	case LAA:
+		return "LAA"
+	case LAI:
+		return "LAI"
+	case LAL:
+		return "LAL"
+	case LAM:
+		return "LAM"
+	case LAV:
+		return "LAV"
+	case LBV:
+		return "LBV"
+	case LCI:
+		return "LCI"
+	case LCM:
+		return "LCM"
+	case LCN:
+		return "LCN"
+	case MDERCH:
+		return "MDERCH"
+	case MDLABEL:
+		return "MDLABEL"
+	case MDQUIT:
+		return "MDQUIT"
+	case MESS:
+		return "MESS"
+	case MULTL:
+		return "MULTL"
+	case NB:
+		return "NB"
+	case NCH:
+		return "NCH"
+	case NOOP:
+		return "NOOP"
+	case PANIC:
+		return "PANIC"
+	case PRGEN:
+		return "PRGEN"
+	case PRGST:
+		return "PRGST"
+	case SAL:
+		return "SAL"
+	case SAV:
+		return "SAV"
+	case SBL:
+		return "SBL"
+	case SBV:
+		return "SBV"
+	case STI:
+		return "STI"
+	case STR:
+		return "STR"
+	case STV:
+		return "STV"
+	case SUBR:
+		return "SUBR"
+	case UNSTK:
+		return "UNSTK"
+	case UNKNOWN:
+		return "UNKNOWN"
+	}
+	// have to cast op as an int to avoid recursion into String()!
+	return fmt.Sprintf("%02x/%03d", int(op), int(op))
+}

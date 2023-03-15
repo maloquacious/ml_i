@@ -11,6 +11,11 @@ type config struct {
 	version    string
 	debug      bool
 	sourcefile string
+	test       struct {
+		astParser bool
+		cstParser bool
+		scanner   bool
+	}
 }
 
 func getConfig() (*config, error) {
@@ -24,8 +29,11 @@ func getConfig() (*config, error) {
 	var (
 		_ = fs.String("config", "", "config file (optional, json)")
 	)
-	fs.BoolVar(&cfg.debug, "debug", cfg.debug, "log debug information (optional)")
 	fs.StringVar(&cfg.sourcefile, "source", cfg.sourcefile, "assembly source file (required)")
+	fs.BoolVar(&cfg.test.scanner, "test-scanner", cfg.test.scanner, "test scanner, then exit")
+	fs.BoolVar(&cfg.test.cstParser, "test-cst-parser", cfg.test.cstParser, "test cst parser, then exit")
+	fs.BoolVar(&cfg.test.astParser, "test-ast-parser", cfg.test.astParser, "test ast parser, then exit")
+	fs.BoolVar(&cfg.debug, "debug", cfg.debug, "log debug information (optional)")
 	if err := ff.Parse(fs, os.Args[1:], ff.WithEnvVarPrefix("LASM"), ff.WithConfigFileFlag("config"), ff.WithConfigFileParser(ff.JSONParser), ff.WithIgnoreUndefined(false)); err != nil {
 		return nil, err
 	} else if cfg.sourcefile == "" {

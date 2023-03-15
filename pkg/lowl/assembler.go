@@ -68,6 +68,23 @@ func Assemble(name string) (*VM, *bytes.Buffer, error) {
 				parameters = append(parameters, string(tok))
 			}
 		}
+		parameters = pToCSL(parameters)
+		for idx, parm := range parameters {
+			env := symtab.getConstants()
+			//// maybe a constant
+			//if n, ok := env[parm]; ok {
+			//	parameters[idx] = fmt.Sprintf("%d", n)
+			//	continue
+			//}
+			if strings.HasPrefix(parm, "OF(") && strings.HasSuffix(parm, ")") {
+				if n, err := ofMacro(ParseOF(parm[2:]), env); err != nil {
+					return nil, listing, err
+				} else {
+					parameters[idx] = fmt.Sprintf("%d", n)
+					continue
+				}
+			}
+		}
 
 		// add the line to the listing
 		if listing != nil {
@@ -104,8 +121,8 @@ func Assemble(name string) (*VM, *bytes.Buffer, error) {
 				return nil, listing, fmt.Errorf("%d: %s: want 1 args: got %d", line, opc, len(parameters))
 			}
 			// set the operand to the literal value
-			if n, err := nOf(line, opc, parameters, symtab.getConstants()); err != nil {
-				return nil, listing, err
+			if n, err := strconv.Atoi(parameters[0]); err != nil {
+				return nil, listing, fmt.Errorf("%d: %s %w", line, opc, err)
 			} else {
 				word.data = WORD(n)
 			}
@@ -148,26 +165,39 @@ func Assemble(name string) (*VM, *bytes.Buffer, error) {
 			if len(parameters) < 1 {
 				return nil, listing, fmt.Errorf("%d: %s: want 1 args: got %d", line, opc, len(parameters))
 			}
-			n, err := nOf(line, opc, parameters, symtab.getConstants())
-			if err != nil {
-				return nil, listing, err
-			}
 			// set the operand to the literal value
-			word.data = WORD(n)
+			if n, err := strconv.Atoi(parameters[0]); err != nil {
+				return nil, listing, fmt.Errorf("%d: %s %w", line, opc, err)
+			} else {
+				word.data = WORD(n)
+			}
 			vm.core[vm.pc], vm.pc = word, vm.pc+1
 		case "CAV":
 			word := Word{op: op.CAV}
 			// CAV * V,(A)
 			// CAV * V,(X)
-			if len(parameters) < 3 {
+			if len(parameters) < 2 {
 				return nil, listing, fmt.Errorf("%d: %s: want 2 args: got %d", line, opc, len(parameters))
 			}
-			vName, flag := parameters[0], parameters[2]
+			vName, flag := parameters[0], parameters[1]
 			switch flag {
 			case "A": // compare to address
 				symtab.refVariable(vName, vm.pc) // operand to be back-filled
+				if sym, ok := symtab.getUnaliasedSymbol(vName); !ok || sym.kind == SymIsBackfill {
+					symtab.refVariable(vName, vm.pc) // operand to be back-filled
+				} else if sym.kind == SymIsOnHeap {
+					word.data = WORD(sym.heapIndex) // operand is the variable address
+				} else {
+					return nil, listing, fmt.Errorf("%d: %s %q: invalid", line, opc, vName)
+				}
 			case "X": // compare to signed value
-				symtab.refVariable(vName, vm.pc) // operand to be back-filled
+				if sym, ok := symtab.getUnaliasedSymbol(vName); !ok || sym.kind == SymIsBackfill {
+					symtab.refVariable(vName, vm.pc) // operand to be back-filled
+				} else if sym.kind == SymIsOnHeap {
+					word.data = WORD(sym.heapIndex) // operand is the variable address
+				} else {
+					return nil, listing, fmt.Errorf("%d: %s %q: invalid", line, opc, vName)
+				}
 			default:
 				return nil, listing, fmt.Errorf("%d: %s: unknown flag %q", line, opc, flag)
 			}
@@ -213,143 +243,134 @@ func Assemble(name string) (*VM, *bytes.Buffer, error) {
 			}
 		case "EQU":
 			// EQU V,V
-			if len(parameters) < 3 {
+			if len(parameters) < 2 {
 				return nil, listing, fmt.Errorf("%d: %s: want 2 args: got %d", line, opc, len(parameters))
 			}
-			alias, sym := parameters[0], parameters[2]
+			alias, sym := parameters[0], parameters[1]
 			// add the alias to the symbol table.
 			if err := symtab.defAlias(alias, sym, line); err != nil {
 				return nil, listing, fmt.Errorf("%d: %s %q: %w", line, opc, alias, err)
 			}
 		case "EXIT":
-			vm.core[vm.pc], vm.pc = Word{op: op.EXIT}, vm.pc+1
+			word := Word{op: op.EXIT}
+			// EXIT * N,subroutine name
+			if len(parameters) < 2 {
+				return nil, listing, fmt.Errorf("%d: %s: want 2 args: got %d", line, opc, len(parameters))
+			}
+			exitNumber, name := parameters[0], parameters[1]
+			fmt.Printf("exit %q %q\n", exitNumber, name)
+			if n, err := strconv.Atoi(exitNumber); err != nil {
+				return nil, listing, fmt.Errorf("%d: %s exit wants number: got %q", line, opc, exitNumber)
+			} else if !(0 < n && n < 256) {
+				return nil, listing, fmt.Errorf("%d: %s exit wants number 0<n&&n<256: got %d", line, opc, n)
+			} else {
+				// take one from the number since our return is zero-based.
+				word.data = WORD(n - 1)
+			}
+			fmt.Printf("%4d: %s must clear the return stack\n", line, opc)
+			vm.core[vm.pc], vm.pc = word, vm.pc+1
 		case "FMOVE":
 			vm.core[vm.pc], vm.pc = Word{op: op.FMOVE}, vm.pc+1
 		case "FSTK":
 			vm.core[vm.pc], vm.pc = Word{op: op.FSTK}, vm.pc+1
-		case "GO":
-			word := Word{op: op.GO}
-			// GO label spec
-			if len(parameters) < 1 {
-				return nil, listing, fmt.Errorf("%d: %s: want 7 args: got %d", line, opc, len(parameters))
+		case "GO", "GOEQ", "GOGE", "GOGR", "GOLE", "GOLT", "GOND", "GONE", "GOPC":
+			var word Word
+			switch opc {
+			case "GO":
+				word.op = op.GO
+			case "GOEQ":
+				word.op = op.GOEQ
+			case "GOGE":
+				word.op = op.GOGE
+			case "GOGR":
+				word.op = op.GOGR
+			case "GOLE":
+				word.op = op.GOLE
+			case "GOLT":
+				word.op = op.GOLT
+			case "GOND":
+				word.op = op.GOND
+			case "GONE":
+				word.op = op.GONE
+			case "GOPC":
+				word.op = op.GOPC
+			default:
+				panic(fmt.Sprintf("assert(op != %q)", opc))
 			}
-			vName := parameters[0]
-			if sym, ok := symtab.getUnaliasedSymbol(vName); !ok || sym.kind == SymIsBackfill {
-				symtab.refVariable(vName, vm.pc) // operand to be back-filled
+			// GO label,distance,(E|X),(C|T|X)
+			if len(parameters) < 4 {
+				return nil, listing, fmt.Errorf("%d: %s: want 4 args: got %d", line, opc, len(parameters))
+			}
+			label, distance, exFlag, ctxFlag := parameters[0], parameters[1], parameters[2], parameters[3]
+			if _, err := strconv.Atoi(distance); err != nil {
+				return nil, listing, fmt.Errorf("%d: %s: distance want int: got %q", line, opc, distance)
+			}
+			switch exFlag {
+			case "E": // exits subroutine
+				fmt.Printf("%4d: %s must clear the return stack\n", line, opc)
+				switch opc {
+				case "GO":
+					word.op = op.EXIT
+				case "GOEQ":
+					word.op = op.EXITEQ
+				case "GOGE":
+					word.op = op.EXITGE
+				case "GOGR":
+					word.op = op.EXITGR
+				case "GOLE":
+					word.op = op.EXITLE
+				case "GOLT":
+					word.op = op.EXITLT
+				case "GOND":
+					word.op = op.EXITND
+				case "GONE":
+					word.op = op.EXITNE
+				case "GOPC":
+					word.op = op.EXITPC
+				default:
+					panic(fmt.Sprintf("assert(op != %q)", opc))
+				}
+			case "X": // nothing special
+			default:
+				return nil, listing, fmt.Errorf("%d: %s: exFlag want E|X: got %q", line, opc, exFlag)
+			}
+			switch ctxFlag {
+			case "C": // exit following gosub
+			case "T": // GOADD branch
+			case "X": // nothing special
+			default:
+				return nil, listing, fmt.Errorf("%d: %s: ctxFlag want C|T|X: got %q", line, opc, ctxFlag)
+			}
+			if sym, ok := symtab.getUnaliasedSymbol(name); !ok || sym.kind == SymIsBackfill {
+				symtab.refVariable(label, vm.pc) // operand to be back-filled
 			} else if sym.kind == SymIsAddress {
-				word.data = WORD(sym.address) // operand is the variable address
+				word.data = WORD(sym.address) // operand is the label's address
 			} else {
-				return nil, listing, fmt.Errorf("%d: %s %q: invalid", line, opc, vName)
+				return nil, listing, fmt.Errorf("%d: %s %q: invalid", line, opc, label)
 			}
 			vm.core[vm.pc], vm.pc = word, vm.pc+1
 		case "GOADD":
 			vm.core[vm.pc], vm.pc = Word{op: op.GOADD}, vm.pc+1
-		case "GOEQ":
-			word := Word{op: op.GOEQ}
-			// GOEQ * label spec
-			if len(parameters) < 1 {
-				return nil, listing, fmt.Errorf("%d: %s: want 2 args: got %d", line, opc, len(parameters))
-			}
-			vName := parameters[0]
-			if sym, ok := symtab.getUnaliasedSymbol(vName); !ok || sym.kind == SymIsBackfill {
-				symtab.refVariable(vName, vm.pc) // operand to be back-filled
-			} else if sym.kind == SymIsAddress {
-				word.data = WORD(sym.address) // operand is the variable address
-			} else {
-				return nil, listing, fmt.Errorf("%d: %s %q: invalid", line, opc, vName)
-			}
-			vm.core[vm.pc], vm.pc = word, vm.pc+1
-		case "GOGE":
-			word := Word{op: op.GOGE}
-			// GOGE * label spec
-			if len(parameters) < 1 {
-				return nil, listing, fmt.Errorf("%d: %s: want 2 args: got %d", line, opc, len(parameters))
-			}
-			vName := parameters[0]
-			if sym, ok := symtab.getUnaliasedSymbol(vName); !ok || sym.kind == SymIsBackfill {
-				symtab.refVariable(sym.name, vm.pc) // operand to be back-filled
-			} else if sym.kind == SymIsAddress {
-				word.data = WORD(sym.address) // operand is the variable address
-			} else {
-				return nil, listing, fmt.Errorf("%d: %s %q: invalid", line, opc, vName)
-			}
-			vm.core[vm.pc], vm.pc = word, vm.pc+1
-		case "GOGR":
-			word := Word{op: op.GOGR}
-			// GOGR * label spec
-			if len(parameters) < 1 {
-				return nil, listing, fmt.Errorf("%d: %s: want 2 args: got %d", line, opc, len(parameters))
-			}
-			vName := parameters[0]
-			if sym, ok := symtab.getUnaliasedSymbol(vName); !ok || sym.kind == SymIsBackfill {
-				symtab.refVariable(sym.name, vm.pc) // operand to be back-filled
-			} else if sym.kind == SymIsAddress {
-				word.data = WORD(sym.address) // operand is the variable address
-			} else {
-				return nil, listing, fmt.Errorf("%d: %s %q: invalid", line, opc, vName)
-			}
-			vm.core[vm.pc], vm.pc = word, vm.pc+1
-		case "GOLE":
-			word := Word{op: op.GOLE}
-			// GOLE * label spec
-			if len(parameters) < 1 {
-				return nil, listing, fmt.Errorf("%d: %s: want 2 args: got %d", line, opc, len(parameters))
-			}
-			vName := parameters[0]
-			if sym, ok := symtab.getUnaliasedSymbol(vName); !ok || sym.kind == SymIsBackfill {
-				symtab.refVariable(sym.name, vm.pc) // operand to be back-filled
-			} else if sym.kind == SymIsAddress {
-				word.data = WORD(sym.address) // operand is the variable address
-			} else {
-				return nil, listing, fmt.Errorf("%d: %s %q: invalid", line, opc, vName)
-			}
-			vm.core[vm.pc], vm.pc = word, vm.pc+1
-		case "GOLT":
-			word := Word{op: op.GOLT}
-			// GOLT * label spec
-			if len(parameters) < 1 {
-				return nil, listing, fmt.Errorf("%d: %s: want 2 args: got %d", line, opc, len(parameters))
-			}
-			vName := parameters[0]
-			if sym, ok := symtab.getUnaliasedSymbol(vName); !ok || sym.kind == SymIsBackfill {
-				symtab.refVariable(sym.name, vm.pc) // operand to be back-filled
-			} else if sym.kind == SymIsAddress {
-				word.data = WORD(sym.address) // operand is the variable address
-			} else {
-				return nil, listing, fmt.Errorf("%d: %s %q: invalid", line, opc, vName)
-			}
-			vm.core[vm.pc], vm.pc = word, vm.pc+1
-		case "GOND":
-			vm.core[vm.pc], vm.pc = Word{op: op.GOND}, vm.pc+1
-		case "GONE":
-			word := Word{op: op.GONE}
-			// GONE * label spec
-			if len(parameters) < 1 {
-				return nil, listing, fmt.Errorf("%d: %s: want 2 args: got %d", line, opc, len(parameters))
-			}
-			vName := parameters[0]
-			if sym, ok := symtab.getUnaliasedSymbol(vName); !ok || sym.kind == SymIsBackfill {
-				symtab.refVariable(sym.name, vm.pc) // operand to be back-filled
-			} else if sym.kind == SymIsAddress {
-				word.data = WORD(sym.address) // operand is the variable address
-			} else {
-				return nil, listing, fmt.Errorf("%d: %s %q: invalid", line, opc, vName)
-			}
-			vm.core[vm.pc], vm.pc = word, vm.pc+1
-		case "GOPC":
-			vm.core[vm.pc], vm.pc = Word{op: op.GOPC}, vm.pc+1
 		case "GOSUB":
 			word := Word{op: op.GOSUB}
 			// GOSUB subroutine name,(distance)
 			// GOSUB subroutine name,(X)
-			if len(parameters) < 3 {
+			if len(parameters) < 2 {
 				return nil, listing, fmt.Errorf("%d: %s: want 2 args: got %d", line, opc, len(parameters))
 			}
-			vName, flag := parameters[0], parameters[2]
+			vName, flag := parameters[0], parameters[1]
 			switch flag {
 			case "X": // reference a routine in the MD-logic
-				symtab.refVariable(vName, vm.pc) // operand to be back-filled
-			default: // flag must be a number
+				switch vName {
+				case "MDERCH": // output register C to message stream
+					word = Word{op: op.MDERCH}
+				case "MDQUIT": // quit the application
+					word = Word{op: op.MDQUIT}
+				default:
+					return nil, listing, fmt.Errorf("%d: %s: unknown MD routine %q", line, opc, vName)
+				}
+			default:
+				// flag is unused, but verify that is a number
 				if flag == "-" { // might be a negative number
 					for _, parm := range parameters[3:] {
 						flag = flag + parm
@@ -358,15 +379,21 @@ func Assemble(name string) (*VM, *bytes.Buffer, error) {
 				if _, err := strconv.Atoi(flag); err != nil {
 					return nil, listing, fmt.Errorf("%d: %s: unknown flag %q", line, opc, flag)
 				}
-				symtab.refVariable(vName, vm.pc) // operand to be back-filled
+				if sym, ok := symtab.getUnaliasedSymbol(vName); !ok || sym.kind == SymIsBackfill {
+					symtab.refVariable(sym.name, vm.pc) // operand to be back-filled
+				} else if sym.kind == SymIsSubroutine {
+					word.data = WORD(sym.address) // operand is the subroutine address
+				} else {
+					return nil, listing, fmt.Errorf("%d: %s %q: invalid", line, opc, vName)
+				}
 			}
 			vm.core[vm.pc], vm.pc = word, vm.pc+1
 		case "IDENT":
 			// IDENT V,decimal integer
-			if len(parameters) < 3 {
+			if len(parameters) < 2 {
 				return nil, listing, fmt.Errorf("%d: %s: want 2 args: got %d", line, opc, len(parameters))
 			}
-			vName, number := parameters[0], parameters[2]
+			vName, number := parameters[0], parameters[1]
 			if sym, ok := symtab.getSymbol(vName); ok && sym.kind != SymIsUnknown {
 				return nil, listing, fmt.Errorf("%d: %s %q: redefined", line, opc, vName)
 			}
@@ -384,10 +411,10 @@ func Assemble(name string) (*VM, *bytes.Buffer, error) {
 			word := Word{op: op.LAI}
 			// LAI V,(R)
 			// LAI V,(X)
-			if len(parameters) < 3 {
+			if len(parameters) < 2 {
 				return nil, listing, fmt.Errorf("%d: %s: want 2 args: got %d", line, opc, len(parameters))
 			}
-			vName, flag := parameters[0], parameters[2]
+			vName, flag := parameters[0], parameters[1]
 			switch flag {
 			case "R":
 				symtab.refVariable(vName, vm.pc) // operand to be back-filled
@@ -404,11 +431,11 @@ func Assemble(name string) (*VM, *bytes.Buffer, error) {
 				return nil, listing, fmt.Errorf("%d: %s: want 1 args: got %d", line, opc, len(parameters))
 			}
 			// set the operand to the literal value
-			n, err := nOf(line, opc, parameters, symtab.getConstants())
-			if err != nil {
-				return nil, listing, err
+			if n, err := strconv.Atoi(parameters[0]); err != nil {
+				return nil, listing, fmt.Errorf("%d: %s %w", line, opc, err)
+			} else {
+				word.data = WORD(n)
 			}
-			word.data = WORD(n)
 			vm.core[vm.pc], vm.pc = word, vm.pc+1
 		case "LAM":
 			vm.core[vm.pc], vm.pc = Word{op: op.LAM}, vm.pc+1
@@ -416,10 +443,10 @@ func Assemble(name string) (*VM, *bytes.Buffer, error) {
 			word := Word{op: op.LAV}
 			// LAV V,(X)
 			// LAV V,(R)
-			if len(parameters) < 3 {
+			if len(parameters) < 2 {
 				return nil, listing, fmt.Errorf("%d: %s: want 2 args: got %d", line, opc, len(parameters))
 			}
-			vName, flag := parameters[0], parameters[2]
+			vName, flag := parameters[0], parameters[1]
 			switch flag {
 			case "R":
 				symtab.refVariable(vName, vm.pc) // operand to be back-filled
@@ -442,10 +469,10 @@ func Assemble(name string) (*VM, *bytes.Buffer, error) {
 			word := Word{op: op.LCI}
 			// LCI V,(R)
 			// LCI V,(X)
-			if len(parameters) < 3 {
+			if len(parameters) < 2 {
 				return nil, listing, fmt.Errorf("%d: %s: want 2 args: got %d", line, opc, len(parameters))
 			}
-			vName, flag := parameters[0], parameters[2]
+			vName, flag := parameters[0], parameters[1]
 			switch flag {
 			case "R":
 				symtab.refVariable(vName, vm.pc) // operand to be back-filled
@@ -534,8 +561,8 @@ func Assemble(name string) (*VM, *bytes.Buffer, error) {
 				return nil, listing, fmt.Errorf("%d: %s: want 1 args: got %d", line, opc, len(parameters))
 			}
 			// set the operand to the literal value
-			if n, err := nOf(line, opc, parameters, symtab.getConstants()); err != nil {
-				return nil, listing, err
+			if n, err := strconv.Atoi(parameters[0]); err != nil {
+				return nil, listing, fmt.Errorf("%d: %s %w", line, opc, err)
 			} else {
 				word.data = WORD(n)
 			}
@@ -588,7 +615,7 @@ func Assemble(name string) (*VM, *bytes.Buffer, error) {
 			if len(parameters) < 2 {
 				return nil, listing, fmt.Errorf("%d: %s: want 2 args: got %d", line, opc, len(parameters))
 			}
-			vName, flag := parameters[0], parameters[2]
+			vName, flag := parameters[0], parameters[1]
 			switch flag {
 			case "P":
 				if sym, ok := symtab.getUnaliasedSymbol(vName); !ok || sym.kind == SymIsBackfill {
@@ -611,8 +638,45 @@ func Assemble(name string) (*VM, *bytes.Buffer, error) {
 			}
 			vm.core[vm.pc], vm.pc = word, vm.pc+1
 		case "SUBR":
-			vm.core[vm.pc], vm.pc = Word{op: op.SUBR}, vm.pc+1
-			panic("SUBR must be implemented!")
+			// SUBR  subroutine name,(PARNM),N  // declare subroutine with parameter and/or exits
+			// SUBR  subroutine name,(X    ),N  // declare subroutine no parameters, maybe exits
+			if len(parameters) < 3 {
+				return nil, listing, fmt.Errorf("%d: %s: want 3 args: got %d", line, opc, len(parameters))
+			}
+			name, pName := parameters[0], parameters[1]
+			numberOfExits := 0
+			if n, err := strconv.Atoi(parameters[2]); err != nil {
+				return nil, listing, fmt.Errorf("%d: %s: numberOfExits wants int: got %q", line, opc, numberOfExits)
+			} else if n == 0 {
+				numberOfExits = 1
+			} else {
+				numberOfExits = n
+			}
+			fmt.Printf("%s %q %q %d\n", opc, name, pName, numberOfExits)
+			if pName == "X" {
+				pName = "" // unset because it really isn't a parameter name in this case
+			}
+			// create a new subroutine label here
+			if err := symtab.defSubroutine(name, line, vm.pc, pName, numberOfExits); err != nil {
+				return nil, listing, fmt.Errorf("%d: %s %q: %w", line, opc, name, err)
+			}
+			// if we're given a parameter name, then we must cause that variable to be loaded when the routine is called
+			if pName == "" { // is there a named parameter?
+				// there isn't, so the first instruction of the sub-routine is a NOOP
+				word := Word{op: op.NOOP}
+				vm.core[vm.pc], vm.pc = word, vm.pc+1
+			} else {
+				// there is, so the first operation must be "STV pName" to store register A into the variable
+				word := Word{op: op.STV}
+				if sym, ok := symtab.getUnaliasedSymbol(pName); !ok || sym.kind == SymIsBackfill {
+					symtab.refVariable(sym.name, vm.pc) // operand to be back-filled
+				} else if sym.kind == SymIsOnHeap {
+					word.data = WORD(sym.address) // operand is the variable address
+				} else {
+					return nil, listing, fmt.Errorf("%d: %s %q: invalid", line, opc, pName)
+				}
+				vm.core[vm.pc], vm.pc = word, vm.pc+1
+			}
 		case "UNSTK":
 			vm.core[vm.pc], vm.pc = Word{op: op.UNSTK}, vm.pc+1
 		default:
@@ -636,6 +700,8 @@ func Assemble(name string) (*VM, *bytes.Buffer, error) {
 				vm.core[address].data = WORD(sym.address)
 			case SymIsOnHeap:
 				vm.core[address].data = WORD(sym.heapIndex)
+			case SymIsSubroutine:
+				vm.core[address].data = WORD(sym.address)
 			case SymIsValue:
 				vm.core[address].data = WORD(sym.value)
 			}
@@ -647,17 +713,19 @@ func Assemble(name string) (*VM, *bytes.Buffer, error) {
 		for name, value := range symtab.table {
 			switch value.kind {
 			case SymIsAlias:
-				lines = append(lines, fmt.Sprintf("%-15s  defn %4d    alias-of %s", name, value.line, value.aliasOf))
+				lines = append(lines, fmt.Sprintf("%-15s  defn %4d     alias-of %s", name, value.line, value.aliasOf))
 			case SymIsAddress:
-				lines = append(lines, fmt.Sprintf("%-15s  defn %4d     address %8d", name, value.line, value.address))
+				lines = append(lines, fmt.Sprintf("%-15s  defn %4d      address %8d", name, value.line, value.address))
 			case SymIsBackfill:
-				lines = append(lines, fmt.Sprintf("%-15s  defn %4d   back-fill", name, value.line))
+				lines = append(lines, fmt.Sprintf("%-15s  defn %4d    back-fill", name, value.line))
 			case SymIsOnHeap:
-				lines = append(lines, fmt.Sprintf("%-15s  defn %4d  heap-index %8d", name, value.line, value.heapIndex))
+				lines = append(lines, fmt.Sprintf("%-15s  defn %4d   heap-index %8d", name, value.line, value.heapIndex))
+			case SymIsSubroutine:
+				lines = append(lines, fmt.Sprintf("%-15s  defn %4d  sub-routine %8d", name, value.line, value.address))
 			case SymIsValue:
-				lines = append(lines, fmt.Sprintf("%-15s  defn %4d       value %8d", name, value.line, value.value))
+				lines = append(lines, fmt.Sprintf("%-15s  defn %4d        value %8d", name, value.line, value.value))
 			case SymIsUnknown:
-				lines = append(lines, fmt.Sprintf("%-15s  defn %4d   undefined", name, value.line))
+				lines = append(lines, fmt.Sprintf("%-15s  defn %4d    undefined", name, value.line))
 			}
 		}
 		sort.Strings(lines)
@@ -695,29 +763,37 @@ func ofMacro(expr []string, env map[string]int) (int, error) {
 	return postfix.EvalPostfix(postfix.FromInfix(expr), env)
 }
 
-// nOf is a helper to evaluate a literal or OF macro
-func nOf(line int, opc string, parameters []string, env map[string]int) (n int, err error) {
-	if parameters[0] == "OF" {
-		args := parameters[1:]
-		if args[0] != "(" {
-			return 0, fmt.Errorf("%d: %s: of: missing left paren", line, opc)
-		} else if args[len(args)-1] != ")" {
-			return 0, fmt.Errorf("%d: %s: of: missing right paren", line, opc)
+func ParseOF(expr string) []string {
+	var items []string
+	var item string
+	for ch, rest := expr[:1], expr[1:]; ch != ""; ch, rest = rest[:1], rest[1:] {
+		switch ch {
+		case "(", ")", "+", "*", "-":
+			if item != "" {
+				items = append(items, item)
+			}
+			items = append(items, ch)
+			item = ""
+		default:
+			item = item + ch
 		}
-		return ofMacro(args, env)
-	}
 
-	// maybe a constant
-	if n, ok := env[parameters[0]]; ok {
-		return n, nil
+		if len(rest) == 0 {
+			break
+		}
 	}
+	return items
+}
 
-	var number string
+// pToCSL parses the parameters as comma separated list.
+// todo: wonky workaround for quoted parameters
+func pToCSL(parameters []string) []string {
+	var s string
 	for _, parm := range parameters {
-		number = number + parm
+		if len(parm) > 0 && parm[0] == '\'' {
+			return parameters // dang quoted parameter found
+		}
+		s = s + parm
 	}
-	if n, err = strconv.Atoi(number); err != nil {
-		return 0, fmt.Errorf("%d: %s %q: %w", line, opc, number, err)
-	}
-	return n, nil
+	return strings.Split(s, ",")
 }

@@ -5,9 +5,14 @@ import "github.com/maloquacious/ml_i/pkg/lowl/op"
 type ADDR = uint16
 type WORD = int16
 type Word struct {
-	op      op.Code
-	data    WORD
-	comment string
+	op   op.Code
+	data WORD
+	//operand struct {
+	//	address   ADDR
+	//	heapIndex int
+	//	value     WORD
+	//}
+	comment string // operand wants a comment
 }
 
 const (
@@ -30,6 +35,9 @@ type VM struct {
 	// pc is the program counter
 	pc     ADDR
 	halted bool
+
+	// rs is the return stack
+	rs []ADDR
 
 	// core is the main block of memory
 	core [MAX_WORDS]Word
