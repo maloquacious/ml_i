@@ -29,12 +29,17 @@ type Word struct {
 
 func (m *VM) Run() error {
 	m.PC = m.Start
+	fmt.Printf("vm: starting %d\n", m.Start)
 	var w Word
 	for halt := false; !halt; {
 		w, m.PC = m.Core[m.PC], m.PC+1
 		switch w.Op {
+		case op.DCL:
+			return fmt.Errorf("%d: executing %q", m.PC-1, w.Op)
 		case op.HALT:
 			halt = true
+		case op.MESS: // output a message
+			fmt.Printf("%s", w.Text)
 		default:
 			panic(fmt.Sprintf("assert(op != %q != %d)", w.Op, w.Op))
 		}

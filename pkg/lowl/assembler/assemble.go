@@ -10,6 +10,7 @@ import (
 	"github.com/maloquacious/ml_i/pkg/lowl/ast"
 	"github.com/maloquacious/ml_i/pkg/lowl/op"
 	"github.com/maloquacious/ml_i/pkg/lowl/vm"
+	"strings"
 )
 
 func Assemble(nodes ast.Nodes) (*vm.VM, error) {
@@ -313,7 +314,7 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 			}
 			switch text := node.Parameters[0]; text.Kind {
 			case ast.QuotedText:
-				word.Text = text.Text
+				word.Text = strings.ReplaceAll(text.Text, "$", "\n")
 			default:
 				return nil, fmt.Errorf("%d: %s: %s: not allowed", node.Line, node.Op, text.Kind)
 			}
@@ -335,7 +336,7 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 			}
 			switch text := node.Parameters[0]; text.Kind {
 			case ast.QuotedText:
-				machine.Name, machine.Start = text.Text, machine.PC
+				// no action needed
 			default:
 				return nil, fmt.Errorf("%d: %s: %s: not allowed", node.Line, node.Op, text.Kind)
 			}
@@ -592,8 +593,8 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 		if sym.kind != "address" {
 			panic("BEGIN must be a label")
 		}
-		// fmt.Printf("asm: set vm begin   %-12s %6d\n", "", sym.address)
-		machine.Core[0] = vm.Word{Op: op.GO, Value: sym.address}
+		fmt.Printf("asm: set vm begin   %-12s %6d\n", "", sym.address)
+		machine.Start = sym.address
 	}
 
 	// detect and report undefined symbols
