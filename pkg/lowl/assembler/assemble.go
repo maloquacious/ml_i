@@ -51,11 +51,7 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 	}
 
 	// assemble all the instructions
-	foundPrgst, foundPrgen := false, false
 	for _, node := range nodes {
-		if foundPrgen {
-			fmt.Printf("asm: %d: %d: %q after PRGEN\n", node.Line, node.Col, node.Op)
-		}
 		// provide a default word for the instruction
 		word := vm.Word{Op: node.Op} // default word to the current opcode
 
@@ -70,8 +66,7 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 		case op.GOBRPC: // GOBRPC should not be available to callers
 			return nil, fmt.Errorf("%d: %d: %s: internal error", node.Line, node.Col, node.Op)
 		case op.PRGEN:
-			foundPrgen = true
-			// PRGEN emits no code
+			machine.Core[machine.PC], machine.PC = vm.Word{Op: op.HALT}, machine.PC+1
 		case op.UNKNOWN:
 			return nil, fmt.Errorf("%d: %d: %s: internal error", node.Line, node.Col, node.Op)
 
@@ -340,8 +335,7 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 			}
 			switch text := node.Parameters[0]; text.Kind {
 			case ast.QuotedText:
-				machine.Name = text.Text
-				foundPrgst = true
+				machine.Name, machine.Start = text.Text, machine.PC
 			default:
 				return nil, fmt.Errorf("%d: %s: %s: not allowed", node.Line, node.Op, text.Kind)
 			}
@@ -587,12 +581,6 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 		default:
 			return nil, fmt.Errorf("%d: %s: not implemented", node.Line, node.Op)
 		}
-	}
-
-	if !foundPrgst {
-		return nil, fmt.Errorf("PRGST missing")
-	} else if !foundPrgen {
-		return nil, fmt.Errorf("PRGEN missing")
 	}
 
 	// when we start running the machine, the PC should be set to the first

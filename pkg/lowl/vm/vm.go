@@ -16,6 +16,7 @@ const (
 type VM struct {
 	Name     string // name of the virtual machine
 	PC       int
+	Start    int // starting address
 	BranchPC int // set by GOADD
 	Core     [MAX_WORDS]Word
 }
@@ -27,5 +28,16 @@ type Word struct {
 }
 
 func (m *VM) Run() error {
+	m.PC = m.Start
+	var w Word
+	for halt := false; !halt; {
+		w, m.PC = m.Core[m.PC], m.PC+1
+		switch w.Op {
+		case op.HALT:
+			halt = true
+		default:
+			panic(fmt.Sprintf("assert(op != %q != %d)", w.Op, w.Op))
+		}
+	}
 	return fmt.Errorf("vm.Run: not implemented")
 }
