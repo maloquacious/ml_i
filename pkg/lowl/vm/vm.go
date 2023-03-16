@@ -7,6 +7,7 @@ package vm
 import (
 	"fmt"
 	"github.com/maloquacious/ml_i/pkg/lowl/op"
+	"io"
 )
 
 const (
@@ -29,22 +30,22 @@ type Word struct {
 	Text  string
 }
 
-func (m *VM) Run() error {
+func (m *VM) Run(fp io.Writer) error {
 	m.PC = m.Start
 	fmt.Printf("vm: starting %d\n", m.Start)
 	var w Word
 	for counter, running := 10_000, true; running && counter > 0; counter-- {
 		w, m.PC = m.Core[m.PC], m.PC+1
 		switch w.Op {
-		case op.AAL: // add a literal to register A
+		case op.AAL: // add a number to register A
 			m.A = m.A + w.Value
-		case op.AAV: // add to A a variable
-			return fmt.Errorf("%d: %+v\n", m.PC-1, w)
+		case op.AAV: // add a variable to register A
+			m.A = m.A + m.Core[w.Value].Value
 		case op.ABV: // add to B a variable
 			return fmt.Errorf("%d: %+v\n", m.PC-1, w)
 		case op.ALIGN: // align A up to next boundary
 			return fmt.Errorf("%d: %+v\n", m.PC-1, w)
-		case op.ANDL: // "and" A with a literal
+		case op.ANDL: // "and" A with a number
 			return fmt.Errorf("%d: %+v\n", m.PC-1, w)
 		case op.ANDV: // "and" A with a variable
 			return fmt.Errorf("%d: %+v\n", m.PC-1, w)
@@ -56,13 +57,13 @@ func (m *VM) Run() error {
 			return fmt.Errorf("%d: %+v\n", m.PC-1, w)
 		case op.CAI: // compare A indirect signed integer or // compare A with indirect address
 			return fmt.Errorf("%d: %+v\n", m.PC-1, w)
-		case op.CAL: // compare A with literal
+		case op.CAL: // compare A with number
 			m.compareA(w.Value)
-		case op.CAV: // compare A with variable signed integer // compare A with address
-			return fmt.Errorf("%d: %+v\n", m.PC-1, w)
+		case op.CAV: // compare register A to a variable
+			m.compareA(m.Core[w.Value].Value)
 		case op.CCI: // compare C indirect
 			return fmt.Errorf("%d: %+v\n", m.PC-1, w)
-		case op.CCL: // compare C with literal
+		case op.CCL: // compare C with number
 			return fmt.Errorf("%d: %+v\n", m.PC-1, w)
 		case op.CCN: // compare C with named character
 			return fmt.Errorf("%d: %+v\n", m.PC-1, w)
@@ -94,13 +95,21 @@ func (m *VM) Run() error {
 				m.PC = w.Value
 			}
 		case op.GOGE: // branch if greater than or equal
-			return fmt.Errorf("%d: %+v\n", m.PC-1, w)
+			if m.ACmp == IS_GR || m.ACmp == IS_EQ {
+				m.PC = w.Value
+			}
 		case op.GOGR: // branch if greater than
-			return fmt.Errorf("%d: %+v\n", m.PC-1, w)
+			if m.ACmp == IS_GR {
+				m.PC = w.Value
+			}
 		case op.GOLE: // branch if less than or equal
-			return fmt.Errorf("%d: %+v\n", m.PC-1, w)
+			if m.ACmp == IS_LT || m.ACmp == IS_EQ {
+				m.PC = w.Value
+			}
 		case op.GOLT: // branch if less than
-			return fmt.Errorf("%d: %+v\n", m.PC-1, w)
+			if m.ACmp == IS_LT {
+				m.PC = w.Value
+			}
 		case op.GOND: // branch if C is not a digit; otherwise put value in A
 			return fmt.Errorf("%d: %+v\n", m.PC-1, w)
 		case op.GONE: // branch if not equal
@@ -120,7 +129,7 @@ func (m *VM) Run() error {
 			return fmt.Errorf("%d: %+v\n", m.PC-1, w)
 		case op.LAI: // load A indirect
 			return fmt.Errorf("%d: %+v\n", m.PC-1, w)
-		case op.LAL: // load A with literal
+		case op.LAL: // load A with number
 			m.A = w.Value
 		case op.LAM: // load A modified
 			return fmt.Errorf("%d: %+v\n", m.PC-1, w)
@@ -137,8 +146,8 @@ func (m *VM) Run() error {
 		case op.MDLABEL:
 			return fmt.Errorf("%d: internal error: %q", w.Op)
 		case op.MESS: // copy text to output stream
-			fmt.Printf("%s", w.Text)
-		case op.MULTL: // multiply register A by a literal
+			_, _ = fmt.Fprintf(fp, "%s", w.Text)
+		case op.MULTL: // multiply register A by a number
 			return fmt.Errorf("%d: %+v\n", m.PC-1, w)
 		case op.NB: // comment
 			return fmt.Errorf("%d: %+v\n", m.PC-1, w)
@@ -148,11 +157,11 @@ func (m *VM) Run() error {
 			return fmt.Errorf("%d: %+v\n", m.PC-1, w)
 		case op.PRGST: // start of logic
 			return fmt.Errorf("%d: %+v\n", m.PC-1, w)
-		case op.SAL: // subtract from A a literal
-			return fmt.Errorf("%d: %+v\n", m.PC-1, w)
-		case op.SAV: // subtract from A a variable
-			return fmt.Errorf("%d: %+v\n", m.PC-1, w)
-		case op.SBL: // subtract from B a literal
+		case op.SAL: // subtract a number from register A
+			m.A = m.A - w.Value
+		case op.SAV: // subtract a variable from register A
+			m.A = m.A - m.Core[w.Value].Value
+		case op.SBL: // subtract from B a number
 			return fmt.Errorf("%d: %+v\n", m.PC-1, w)
 		case op.SBV: // subtract from B a variable
 			return fmt.Errorf("%d: %+v\n", m.PC-1, w)

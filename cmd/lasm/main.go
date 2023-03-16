@@ -6,6 +6,7 @@
 package main
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/maloquacious/ml_i/pkg/lowl/assembler"
 	"github.com/maloquacious/ml_i/pkg/lowl/ast"
@@ -57,5 +58,8 @@ func run(cfg *config) error {
 	if err != nil {
 		return err
 	}
-	return vm.Run()
+	bb := &bytes.Buffer{}
+	err = vm.Run(bb)
+	_ = os.WriteFile("vm.txt", bb.Bytes(), 0644)
+	return err
 }
