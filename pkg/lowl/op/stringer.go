@@ -1,6 +1,6 @@
-/*
- * Copyright (c) 2023 Michael D Henderson. All rights reserved.
- */
+// ml_i - an ML/I macro processor ported to Go
+// Copyright (c) 2023 Michael D Henderson.
+// All rights reserved.
 
 package op
 
@@ -78,6 +78,8 @@ func (op Code) String() string {
 		return "GO"
 	case GOADD:
 		return "GOADD"
+	case GOBRPC:
+		return "GOBRPC"
 	case GOEQ:
 		return "GOEQ"
 	case GOGE:
@@ -96,6 +98,8 @@ func (op Code) String() string {
 		return "GOPC"
 	case GOSUB:
 		return "GOSUB"
+	case HALT:
+		return "HALT"
 	case IDENT:
 		return "IDENT"
 	case LAA:
@@ -132,8 +136,6 @@ func (op Code) String() string {
 		return "NCH"
 	case NOOP:
 		return "NOOP"
-	case PANIC:
-		return "PANIC"
 	case PRGEN:
 		return "PRGEN"
 	case PRGST:

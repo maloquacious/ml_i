@@ -1,3 +1,7 @@
+// ml_i - an ML/I macro processor ported to Go
+// Copyright (c) 2023 Michael D Henderson.
+// All rights reserved.
+
 package lowl
 
 import (
@@ -23,8 +27,6 @@ func (vm *VM) step() bool {
 	vm.pc++
 
 	switch c.op {
-	case op.PANIC:
-		panic(c.op.String()) // Code = iota
 	case op.AAL: // add a literal value to A
 		vm.a = vm.a + c.data
 		return ok
@@ -139,6 +141,8 @@ func (vm *VM) step() bool {
 		vm.rs = append(vm.rs, vm.pc) // push pc onto the return stack
 		vm.pc = ADDR(c.data)         // jump to the sub-routine
 		return ok
+	case op.HALT: // stop the VM
+		panic(c.op.String()) // Code = iota
 	case op.IDENT:
 		panic(c.op.String()) // equate name to integer
 	case op.LAA:

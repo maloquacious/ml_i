@@ -1,3 +1,7 @@
+// ml_i - an ML/I macro processor ported to Go
+// Copyright (c) 2023 Michael D Henderson.
+// All rights reserved.
+
 package lowl
 
 import (
@@ -388,6 +392,8 @@ func Assemble(name string) (*VM, *bytes.Buffer, error) {
 				}
 			}
 			vm.core[vm.pc], vm.pc = word, vm.pc+1
+		case "HALT":
+			vm.core[vm.pc], vm.pc = Word{op: op.HALT}, vm.pc+1
 		case "IDENT":
 			// IDENT V,decimal integer
 			if len(parameters) < 2 {
@@ -542,8 +548,6 @@ func Assemble(name string) (*VM, *bytes.Buffer, error) {
 				word.data = WORD(ch) // set the operand to the constant
 			}
 			vm.core[vm.pc], vm.pc = word, vm.pc+1
-		case "PANIC":
-			vm.core[vm.pc], vm.pc = Word{op: op.PANIC}, vm.pc+1
 		case "PRGEN":
 			vm.core[vm.pc], vm.pc = Word{op: op.PRGEN}, vm.pc+1
 		case "PRGST":

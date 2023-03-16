@@ -1,6 +1,6 @@
-/*
- * Copyright (c) 2023 Michael D Henderson. All rights reserved.
- */
+// ml_i - an ML/I macro processor ported to Go
+// Copyright (c) 2023 Michael D Henderson.
+// All rights reserved.
 
 // Package ast accepts scanner tokens and returns an abstract syntax tree.
 package ast
@@ -15,11 +15,8 @@ type Nodes []*Node
 
 func Parse(parseTree []*cst.Node) (Nodes, error) {
 	var nodes Nodes
-	var node, priorNode *Node
+	var node *Node
 	for _, cnode := range parseTree {
-		if len(nodes) != 0 {
-			priorNode = nodes[len(nodes)-1]
-		}
 		switch cnode.Kind {
 		case cst.Error:
 			return nil, cnode.Error
@@ -37,14 +34,6 @@ func Parse(parseTree []*cst.Node) (Nodes, error) {
 					Kind: Label,
 					Text: cnode.String}}})
 		case cst.OpCode:
-			if cnode.OpCode == op.CON { // label con literal s/b con label,literal
-				if priorNode == nil || priorNode.Op != op.MDLABEL {
-					return nil, fmt.Errorf("ast:%d:%d: CON does not follow LABEL\n", cnode.Line, cnode.Col)
-				}
-				priorNode.Op = op.CON
-				priorNode.Parameters = append(priorNode.Parameters, &Parameter{Line: cnode.Line, Col: cnode.Col, Kind: Number, Number: cnode.Parameters[0].Number})
-				continue
-			}
 			node = &Node{
 				Line: cnode.Line,
 				Col:  cnode.Col,

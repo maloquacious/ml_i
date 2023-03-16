@@ -1,6 +1,6 @@
-/*
- * Copyright (c) 2023 Michael D Henderson. All rights reserved.
- */
+// ml_i - an ML/I macro processor ported to Go
+// Copyright (c) 2023 Michael D Henderson.
+// All rights reserved.
 
 package vm
 
@@ -14,13 +14,16 @@ const (
 )
 
 type VM struct {
-	PC   int
-	Core [64]Word
+	Name     string // name of the virtual machine
+	PC       int
+	BranchPC int // set by GOADD
+	Core     [MAX_WORDS]Word
 }
 
 type Word struct {
-	Op      op.Code
-	Address int
+	Op    op.Code
+	Value int
+	Text  string
 }
 
 func (vm *VM) Run() error {

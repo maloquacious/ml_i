@@ -1,3 +1,7 @@
+// ml_i - an ML/I macro processor ported to Go
+// Copyright (c) 2023 Michael D Henderson.
+// All rights reserved.
+
 // Package op defines the enums for opcodes.
 package op
 
@@ -21,7 +25,7 @@ type Code byte
 
 // enums for opcodes
 const (
-	PANIC  Code = iota
+	HALT   Code = iota
 	AAL         // add a literal to A
 	AAV         // add a variable to A
 	ABV         // add a variable to B
@@ -56,6 +60,7 @@ const (
 	FSTK        // push register A on forwards stack
 	GO          // unconditional branch
 	GOADD       // multi-way branch
+	GOBRPC      // branch if PC equals BranchPC
 	GOEQ        // branch if equal
 	GOGE        // branch if greater than or equal
 	GOGR        // branch if greater than

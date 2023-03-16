@@ -1,6 +1,6 @@
-/*
- * Copyright (c) 2023 Michael D Henderson. All rights reserved.
- */
+// ml_i - an ML/I macro processor ported to Go
+// Copyright (c) 2023 Michael D Henderson.
+// All rights reserved.
 
 package ast
 
@@ -14,17 +14,6 @@ type Parameter struct {
 	Number    int
 	Text      string
 }
-
-type Kind int
-
-const (
-	Expression Kind = iota
-	Label
-	Macro
-	Number
-	QuotedText
-	Variable
-)
 
 func (parms Parameters) String() string {
 	if len(parms) == 0 {

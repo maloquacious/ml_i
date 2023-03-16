@@ -1,6 +1,6 @@
-/*
- * Copyright (c) 2023 Michael D Henderson. All rights reserved.
- */
+// ml_i - an ML/I macro processor ported to Go
+// Copyright (c) 2023 Michael D Henderson.
+// All rights reserved.
 
 package op
 
@@ -67,7 +67,7 @@ func Lookup(s string) (Code, bool) {
 		stringToCode["NB"] = NB
 		stringToCode["NCH"] = NCH
 		stringToCode["NOOP"] = NOOP
-		stringToCode["PANIC"] = PANIC
+		stringToCode["HALT"] = HALT
 		stringToCode["PRGEN"] = PRGEN
 		stringToCode["PRGST"] = PRGST
 		stringToCode["SAL"] = SAL
