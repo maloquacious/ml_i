@@ -26,6 +26,6 @@ type Word struct {
 	Text  string
 }
 
-func (vm *VM) Run() error {
+func (m *VM) Run() error {
 	return fmt.Errorf("vm.Run: not implemented")
 }

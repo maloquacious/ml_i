@@ -6,37 +6,12 @@ package assembler
 
 import (
 	"fmt"
-	"github.com/maloquacious/ml_i/pkg/lowl/ast"
 )
 
 // A symbol table is a data structure used by an assembler to keep track of symbolic information, such as the names and values of labels and variables in the source code. The specific functions available on a symbol table may vary depending on the assembler implementation, but some common functions include:
 
-func newSymbolTable(nodes ast.Nodes) *symbolTable {
-	st := &symbolTable{symbols: make(map[string]*symbolNode)}
-	//for _, node := range nodes {
-	//	var sym *symbolNode
-	//	switch node.Op {
-	//	case op.CON:
-	//		fmt.Printf("nst: define  const %-12s %6d\n", node.Parameters[0].Text, node.Parameters[1].Number)
-	//		sym = &symbolNode{name: node.Parameters[0].Text, kind: "const", number: node.Parameters[1].Number}
-	//	case op.DCL:
-	//		fmt.Printf("nst: declare var    %s\n", node.Parameters[0].Text)
-	//		sym = &symbolNode{name: node.Parameters[0].Text, kind: "variable", address: 0}
-	//	case op.EQU:
-	//		fmt.Printf("nst: define  alias  %s\n", node.Parameters[0].Text)
-	//		sym = &symbolNode{name: node.Parameters[0].Text, kind: "variable", text: node.Parameters[1].Text}
-	//	case op.MDLABEL:
-	//		fmt.Printf("nst: define  label  %s\n", node.Parameters[0].Text)
-	//		sym = &symbolNode{name: node.Parameters[0].Text, kind: "label", address: 0}
-	//	case op.SUBR:
-	//		fmt.Printf("nst: declare sub    %s\n", node.Parameters[0].Text)
-	//		sym = &symbolNode{name: node.Parameters[0].Text, kind: "subroutine", address: 0}
-	//	}
-	//	if sym != nil {
-	//		st[sym.name] = sym
-	//	}
-	//}
-	return st
+func newSymbolTable() *symbolTable {
+	return &symbolTable{symbols: make(map[string]*symbolNode)}
 }
 
 type symbolTable struct {
@@ -44,8 +19,9 @@ type symbolTable struct {
 }
 
 type symbolNode struct {
-	name string // name of the symbol
-	kind string // kind of the symbol
+	name    string // name of the symbol
+	kind    string // kind of the symbol
+	defined bool   // set to true when defined
 	// value of the symbol
 	address  int
 	constant int
@@ -80,7 +56,12 @@ func (st *symbolTable) InsertAddress(name string, address int) bool {
 	if _, ok := st.symbols[name]; ok {
 		return false
 	}
-	st.symbols[name] = &symbolNode{name: name, kind: "address", address: address}
+	st.symbols[name] = &symbolNode{
+		name:    name,
+		kind:    "address",
+		address: address,
+		defined: true,
+	}
 	return true
 }
 
@@ -91,7 +72,12 @@ func (st *symbolTable) InsertAlias(name string, text string) bool {
 	} else if sym, ok = st.symbols[text]; ok && sym.kind == "alias" {
 		panic(fmt.Sprintf("alias %q references alias %q", name, text))
 	}
-	st.symbols[name] = &symbolNode{name: name, kind: "alias", literal: text}
+	st.symbols[name] = &symbolNode{
+		name:    name,
+		kind:    "alias",
+		literal: text,
+		defined: true,
+	}
 	return true
 }
 
@@ -100,7 +86,12 @@ func (st *symbolTable) InsertConstant(name string, number int) bool {
 	if _, ok := st.symbols[name]; ok {
 		return false
 	}
-	st.symbols[name] = &symbolNode{name: name, kind: "constant", constant: number}
+	st.symbols[name] = &symbolNode{
+		name:     name,
+		kind:     "constant",
+		constant: number,
+		defined:  true,
+	}
 	return true
 }
 
@@ -109,7 +100,12 @@ func (st *symbolTable) InsertLiteral(name string, text string) bool {
 	if _, ok := st.symbols[name]; ok {
 		return false
 	}
-	st.symbols[name] = &symbolNode{name: name, kind: "literal", literal: text}
+	st.symbols[name] = &symbolNode{
+		name:    name,
+		kind:    "literal",
+		literal: text,
+		defined: true,
+	}
 	return true
 }
 
@@ -140,11 +136,3 @@ func (st *symbolTable) UpdateConstant(name string, number int) {
 func (st *symbolTable) UpdateLiteral(name string, number int) {
 	panic("should never call symbolTable.UpdateLiteral")
 }
-
-//Deletion: This function removes a symbol from the symbol table.
-
-//Scoping: This function keeps track of the current scope of the code and resolves symbol conflicts by giving priority to symbols defined in the innermost scope.
-
-//Error reporting: This function detects and reports errors such as duplicate symbol definitions, undefined symbols, and incorrect symbol usage.
-
-//Memory allocation: This function calculates the memory locations where symbols will be stored in the final executable code.

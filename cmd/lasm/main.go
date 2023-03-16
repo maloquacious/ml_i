@@ -52,20 +52,10 @@ func run(cfg *config) error {
 		}
 		return nil
 	}
+
 	vm, err := assembler.Assemble(syntaxTree)
 	if err != nil {
 		return err
 	}
-	fmt.Println(vm)
-
-	//vm, listing, err := lowl.Assemble(cfg.sourcefile)
-	//if err != nil {
-	//	return fmt.Errorf("assemble: %w", err)
-	//} else if listing == nil {
-	//	return fmt.Errorf("package is empty")
-	//} else if err = os.WriteFile("lowl_app.txt", listing.Bytes(), 0644); err != nil {
-	//	return err
-	//}
-
 	return vm.Run()
 }
