@@ -15,12 +15,14 @@ import (
 func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 	// create symbol table and initialize it with required constants
 	symtab := newSymbolTable(nodes)
+	symtab.InsertConstant("DSTPT", 0)     // destination field pointer (stack moves)
 	symtab.InsertConstant("LCH", 1)       // LCH is the length (in words) of a character
 	symtab.InsertConstant("LNM", 1)       // LMN is the length (in words) of a number
 	symtab.InsertConstant("LICH", 1)      // LICH is the inverse of LCH
 	symtab.InsertConstant("NLREP", '\n')  // new-line
 	symtab.InsertConstant("QUTREP", '"')  // quote mark
 	symtab.InsertConstant("SPREP", ' ')   // space
+	symtab.InsertConstant("SRCPT", 0)     // source field pointer (stack moves)
 	symtab.InsertConstant("TABREP", '\t') // tab
 
 	machine := &vm.VM{}
@@ -35,12 +37,18 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 
 		// emit the word
 		switch node.Op {
-		case op.AAL: // add literal value to register A
+		case op.AAL: // add n-of value to register A
 			if minArgs := 1; len(node.Parameters) < minArgs {
 				return nil, fmt.Errorf("%d: %s: want %d args: got %d", node.Line, node.Op, minArgs, len(node.Parameters))
 			}
 			nOF := node.Parameters[0]
 			switch nOF.Kind {
+			case ast.Macro:
+				value, err := evalMacro(nOF.Text, node.Parameters[1:], symtab.GetEnv())
+				if err != nil {
+					return nil, fmt.Errorf("%d: %s: %s %s: %w", node.Line, node.Op, nOF.Kind, nOF.Text, err)
+				}
+				word.Value = value
 			case ast.Number:
 				word.Value = nOF.Number
 			default:
@@ -82,6 +90,10 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 			default:
 				return nil, fmt.Errorf("%d: %s: %s: not implemented", node.Line, node.Op, v.Kind)
 			}
+			machine.Core[machine.PC], machine.PC = word, machine.PC+1
+		case op.BMOVE: // backwards block move
+			machine.Core[machine.PC], machine.PC = word, machine.PC+1
+		case op.BSTK: // push register A onto stack BS
 			machine.Core[machine.PC], machine.PC = word, machine.PC+1
 		case op.BUMP: // add a literal or expression to a variable V
 			if minArgs := 2; len(node.Parameters) < minArgs {
@@ -160,6 +172,25 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 				return nil, fmt.Errorf("%d: %s: %s: not implemented", node.Line, node.Op, v.Kind)
 			}
 			machine.Core[machine.PC], machine.PC = word, machine.PC+1
+		case op.CCN: // compare register C with named character
+			if minArgs := 1; len(node.Parameters) < minArgs {
+				return nil, fmt.Errorf("%d: %s: want %d args: got %d", node.Line, node.Op, minArgs, len(node.Parameters))
+			}
+			constant := node.Parameters[0]
+			switch constant.Kind {
+			case ast.Variable:
+				// must be a constant
+				if sym, ok := symtab.Lookup(constant.Text); !ok {
+					return nil, fmt.Errorf("%d: %s: %s: forward declaration not allowed", node.Line, node.Op, constant.Text)
+				} else if sym.kind != "constant" {
+					return nil, fmt.Errorf("%d: %s: %s: must be constant", node.Line, node.Op, constant.Text)
+				} else {
+					word.Value = sym.constant
+				}
+			default:
+				return nil, fmt.Errorf("%d: %s: %s: not implemented", node.Line, node.Op, constant.Kind)
+			}
+			machine.Core[machine.PC], machine.PC = word, machine.PC+1
 		case op.CON: // allocate memory and initialize it
 			word.Op = op.HALT // non-executable instruction!
 			if minArgs := 1; len(node.Parameters) < minArgs {
@@ -175,6 +206,8 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 			}
 			machine.Core[machine.PC], machine.PC = word, machine.PC+1
 		case op.CSS: // pop the return stack
+			machine.Core[machine.PC], machine.PC = word, machine.PC+1
+		case op.CFSTK: // push register C onto stack FS
 			machine.Core[machine.PC], machine.PC = word, machine.PC+1
 		case op.DCL: // allocate memory, create a variable, link them
 			if minArgs := 1; len(node.Parameters) < minArgs {
@@ -193,6 +226,10 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 			// create an alias to another variable
 			name, alias := node.Parameters[0].Text, node.Parameters[1].Text
 			symtab.InsertAlias(name, alias)
+		case op.FMOVE: // forwards block move
+			machine.Core[machine.PC], machine.PC = word, machine.PC+1
+		case op.FSTK: // push register A onto stack FS
+			machine.Core[machine.PC], machine.PC = word, machine.PC+1
 		case op.GO, op.GOEQ, op.GOGE, op.GOLE, op.GOLT, op.GONE, op.GOGR: // GOxxx label,distance,(E|X),(C|T|X)
 			if minArgs := 4; len(node.Parameters) < minArgs {
 				return nil, fmt.Errorf("%d: %s: want %d args: got %d", node.Line, node.Op, minArgs, len(node.Parameters))
@@ -267,6 +304,56 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 				return nil, fmt.Errorf("%d: %s: want constant: got %s", node.Line, node.Op, constant.Kind)
 			}
 			symtab.InsertConstant(v.Text, constant.Number)
+		case op.LAA: // load register A with address of variable V
+			if minArgs := 2; len(node.Parameters) < minArgs {
+				return nil, fmt.Errorf("%d: %s: want %d args: got %d", node.Line, node.Op, minArgs, len(node.Parameters))
+			}
+			v, cdFlag := node.Parameters[0], node.Parameters[1]
+			switch v.Kind {
+			case ast.Variable:
+				symtab.AddReference(v.Text, machine.PC)
+			default:
+				return nil, fmt.Errorf("%d: %s: %s not implemented", node.Line, node.Op, v.Kind)
+			}
+			switch cdFlag.Kind {
+			case ast.Variable:
+				switch cdFlag.Text {
+				case "C": // load A with the address of the table label
+					// no special action needed
+				case "D": // load A with the address of variable V
+					// no special action needed
+				default:
+					return nil, fmt.Errorf("%d: %s: cdFlag want C|D: got %q", node.Line, node.Op, cdFlag.Text)
+				}
+			default:
+				return nil, fmt.Errorf("%d: %s: %s not implemented", node.Line, node.Op, cdFlag.Kind)
+			}
+			machine.Core[machine.PC], machine.PC = word, machine.PC+1
+		case op.LAI, op.LCI: // indirect load of register A|C
+			if minArgs := 2; len(node.Parameters) < minArgs {
+				return nil, fmt.Errorf("%d: %s: want %d args: got %d", node.Line, node.Op, minArgs, len(node.Parameters))
+			}
+			v, rxFlag := node.Parameters[0], node.Parameters[1]
+			switch v.Kind {
+			case ast.Variable:
+				symtab.AddReference(v.Text, machine.PC)
+			default:
+				return nil, fmt.Errorf("%d: %s: %s not implemented", node.Line, node.Op, v.Kind)
+			}
+			switch rxFlag.Kind {
+			case ast.Variable:
+				switch rxFlag.Text {
+				case "R": // load may be redundant
+					// no special action needed
+				case "X": // load is not redundant
+					// no special action needed
+				default:
+					return nil, fmt.Errorf("%d: %s: rxFlag want R|X: got %q", node.Line, node.Op, rxFlag.Text)
+				}
+			default:
+				return nil, fmt.Errorf("%d: %s: %s not implemented", node.Line, node.Op, rxFlag.Kind)
+			}
+			machine.Core[machine.PC], machine.PC = word, machine.PC+1
 		case op.LAL: // load register A with constant or the value of an expression
 			if minArgs := 1; len(node.Parameters) < minArgs {
 				return nil, fmt.Errorf("%d: %s: want %d args: got %d", node.Line, node.Op, minArgs, len(node.Parameters))
@@ -285,24 +372,72 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 				return nil, fmt.Errorf("%d: %s: %s: not implemented", node.Line, node.Op, nOF.Kind)
 			}
 			machine.Core[machine.PC], machine.PC = word, machine.PC+1
-		case op.LAV: // load register A from variable V
-			if minArgs := 2; len(node.Parameters) < minArgs {
+		case op.LAM: // load register A from register B modified by n-of
+			if minArgs := 1; len(node.Parameters) < minArgs {
 				return nil, fmt.Errorf("%d: %s: want %d args: got %d", node.Line, node.Op, minArgs, len(node.Parameters))
 			}
-			v, rxFlag := node.Parameters[0], node.Parameters[1].Text
-			switch rxFlag {
-			case "R": // load may be redundant
-				// no special action needed
-			case "X": // normal load
-				// no special action needed
+			nOF := node.Parameters[0]
+			switch nOF.Kind {
+			case ast.Macro:
+				value, err := evalMacro(nOF.Text, node.Parameters[1:], symtab.GetEnv())
+				if err != nil {
+					return nil, fmt.Errorf("%d: %s: %s %s: %w", node.Line, node.Op, nOF.Kind, nOF.Text, err)
+				}
+				word.Value = value
+			case ast.Number:
+				word.Value = nOF.Number
 			default:
-				return nil, fmt.Errorf("%d: %s: exFlag want E|X: got %q", node.Line, node.Op, rxFlag)
+				return nil, fmt.Errorf("%d: %s: %s: not implemented", node.Line, node.Op, nOF.Kind)
 			}
+			machine.Core[machine.PC], machine.PC = word, machine.PC+1
+		case op.LAV, op.LBV: // load register A|B from variable V
+			if minArgs := 1; len(node.Parameters) < minArgs {
+				return nil, fmt.Errorf("%d: %s: want %d args: got %d", node.Line, node.Op, minArgs, len(node.Parameters))
+			}
+			v := node.Parameters[0]
 			switch v.Kind {
 			case ast.Variable:
 				symtab.AddReference(v.Text, machine.PC)
 			default:
 				return nil, fmt.Errorf("%d: %s: %s not implemented", node.Line, node.Op, v.Kind)
+			}
+			switch node.Op {
+			case op.LAV:
+				rxFlag := node.Parameters[1]
+				switch rxFlag.Kind {
+				case ast.Variable:
+					switch rxFlag.Text {
+					case "R": // load may be redundant
+						// no special action needed
+					case "X": // normal load
+						// no special action needed
+					default:
+						return nil, fmt.Errorf("%d: %s: exFlag want E|X: got %q", node.Line, node.Op, rxFlag)
+					}
+				default:
+					return nil, fmt.Errorf("%d: %s: %s not implemented", node.Line, node.Op, rxFlag.Kind)
+				}
+			default:
+				// no special action needed
+			}
+			machine.Core[machine.PC], machine.PC = word, machine.PC+1
+		case op.LCN: // load named character into register C
+			if minArgs := 1; len(node.Parameters) < minArgs {
+				return nil, fmt.Errorf("%d: %s: want %d args: got %d", node.Line, node.Op, minArgs, len(node.Parameters))
+			}
+			constant := node.Parameters[0]
+			switch constant.Kind {
+			case ast.Variable:
+				// must be a constant
+				if sym, ok := symtab.Lookup(constant.Text); !ok {
+					return nil, fmt.Errorf("%d: %s: %s: forward declaration not allowed", node.Line, node.Op, constant.Text)
+				} else if sym.kind != "constant" {
+					return nil, fmt.Errorf("%d: %s: %s: must be constant", node.Line, node.Op, constant.Text)
+				} else {
+					word.Value = sym.constant
+				}
+			default:
+				return nil, fmt.Errorf("%d: %s: %s: not implemented", node.Line, node.Op, constant.Kind)
 			}
 			machine.Core[machine.PC], machine.PC = word, machine.PC+1
 		case op.MDLABEL: // create a label and link it to the current PC
@@ -426,6 +561,18 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 			//	numberOfExits = 1
 			//}
 			panic("!!sub-routine!!")
+		case op.UNSTK: // pop stack BS and store in variable V
+			if minArgs := 1; len(node.Parameters) < minArgs {
+				return nil, fmt.Errorf("%d: %s: want %d args: got %d", node.Line, node.Op, minArgs, len(node.Parameters))
+			}
+			v := node.Parameters[0]
+			switch v.Kind {
+			case ast.Variable:
+				symtab.AddReference(v.Text, machine.PC)
+			default:
+				return nil, fmt.Errorf("%d: %s: %s: not implemented", node.Line, node.Op, v.Kind)
+			}
+			machine.Core[machine.PC], machine.PC = word, machine.PC+1
 
 		default:
 			return nil, fmt.Errorf("%d: %s: not implemented", node.Line, node.Op)
