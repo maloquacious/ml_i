@@ -10,11 +10,7 @@ import (
 	"github.com/maloquacious/ml_i/pkg/postfix"
 )
 
-func evalMacro(macro string, parameters ast.Parameters, env map[string]int) (int, error) {
-	if minArgs := 1; len(parameters) < minArgs {
-		return 0, fmt.Errorf("macro: want %d args: got %d", minArgs, len(parameters))
-	}
-	expr := parameters[0]
+func evalMacro(macro string, expr *ast.Parameter, env map[string]int) (int, error) {
 	switch expr.Kind {
 	case ast.Expression:
 		switch macro {
