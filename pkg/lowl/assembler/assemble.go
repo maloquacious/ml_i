@@ -107,6 +107,12 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 			}
 			nOF := node.Parameters[0]
 			switch nOF.Kind {
+			case ast.Macro:
+				value, err := evalMacro(nOF.Text, node.Parameters[1:], symtab.GetEnv())
+				if err != nil {
+					return nil, fmt.Errorf("%d: %s: %s %s: %w", node.Line, node.Op, nOF.Kind, nOF.Text, err)
+				}
+				word.Value = value
 			case ast.Number:
 				word.Value = nOF.Number
 			case ast.Variable:
@@ -268,25 +274,11 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 			nOF := node.Parameters[0]
 			switch nOF.Kind {
 			case ast.Macro:
-				switch nOF.Text {
-				case "OF":
-					if minArgs := 1; len(node.Parameters) < minArgs {
-						return nil, fmt.Errorf("%d: %s: want %d args: got %d", node.Line, node.Op, minArgs, len(node.Parameters))
-					}
-					expr := node.Parameters[1]
-					switch expr.Kind {
-					case ast.Expression:
-						value, err := ofMacro(parseExpr(expr.Text), symtab.GetEnv())
-						if err != nil {
-							return nil, fmt.Errorf("%d: %s: %s %s: %w", node.Line, node.Op, nOF.Kind, nOF.Text, err)
-						}
-						word.Value = value
-					default:
-						return nil, fmt.Errorf("%d: %s: %s %s: want expression: got %s", node.Line, node.Op, nOF.Kind, nOF.Text, expr.Kind)
-					}
-				default:
-					return nil, fmt.Errorf("%d: %s: %s %s: not implemented", node.Line, node.Op, nOF.Kind, nOF.Text)
+				value, err := evalMacro(nOF.Text, node.Parameters[1:], symtab.GetEnv())
+				if err != nil {
+					return nil, fmt.Errorf("%d: %s: %s %s: %w", node.Line, node.Op, nOF.Kind, nOF.Text, err)
 				}
+				word.Value = value
 			case ast.Number:
 				word.Value = nOF.Number
 			default:
@@ -358,6 +350,12 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 			}
 			nOF := node.Parameters[0]
 			switch nOF.Kind {
+			case ast.Macro:
+				value, err := evalMacro(nOF.Text, node.Parameters[1:], symtab.GetEnv())
+				if err != nil {
+					return nil, fmt.Errorf("%d: %s: %s %s: %w", node.Line, node.Op, nOF.Kind, nOF.Text, err)
+				}
+				word.Value = value
 			case ast.Number:
 				word.Value = nOF.Number
 			default:
