@@ -55,6 +55,8 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 	for _, node := range nodes {
 		// provide a default word for the instruction
 		word := vm.Word{Op: node.Op} // default word to the current opcode
+		// debugging
+		word.Text = fmt.Sprintf("%d: %s: %s", node.Line, node.Op.String(), node.Parameters.String())
 
 		// emit the word
 		switch node.Op {
@@ -156,13 +158,10 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 			}
 			switch name := node.Parameters[0]; name.Kind {
 			case ast.Label:
-				if _, ok := symtab.Lookup(name.Text); !ok {
-					if ok := symtab.InsertAddress(name.Text, machine.PC); !ok {
-						return nil, fmt.Errorf("%d: %s: internal error: %s redefined", node.Line, node.Op, name.Kind)
-					}
-				} else {
-					symtab.UpdateAddress(name.Text, machine.PC)
+				if _, ok := symtab.Lookup(name.Text); ok {
+					return nil, fmt.Errorf("%d: %s: internal error: %s redefined", node.Line, node.Op, name.Kind)
 				}
+				symtab.InsertAddress(name.Text, machine.PC)
 			default:
 				return nil, fmt.Errorf("%d: %s: %s not allowed", node.Line, node.Op, name.Kind)
 			}
@@ -600,7 +599,7 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 	// detect and report undefined symbols
 	undefinedSymbols := 0
 	for _, sym := range symtab.symbols {
-		if sym.defined {
+		if sym.kind != "undefined" && sym.defined {
 			continue
 		}
 		fmt.Printf("asm: error: undefined symbol %q %q\n", sym.name, sym.kind)
@@ -642,8 +641,6 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 			panic(fmt.Sprintf("assert(sym.kind != %q)", sym.kind))
 		}
 	}
-
-	machine.Core[0] = vm.Word{Op: op.GO, Value: machine.PC}
 
 	return machine, nil
 }

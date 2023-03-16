@@ -35,7 +35,11 @@ type symbolNode struct {
 func (st *symbolTable) AddReference(name string, address int) {
 	sym, ok := st.symbols[name]
 	if !ok {
-		sym = &symbolNode{name: name, kind: "undefined"}
+		sym = &symbolNode{
+			name: name,
+			kind: "undefined",
+		}
+		st.symbols[name] = sym
 	}
 	sym.backFill = append(sym.backFill, address)
 }
@@ -53,8 +57,12 @@ func (st *symbolTable) GetEnv() map[string]int {
 
 // InsertAddress adds a new symbol to the symbol table with its name and value.
 func (st *symbolTable) InsertAddress(name string, address int) bool {
-	if _, ok := st.symbols[name]; ok {
-		return false
+	if sym, ok := st.symbols[name]; ok {
+		if sym.kind != "undefined" {
+			return false
+		}
+		sym.kind, sym.address, sym.defined = "address", address, true
+		return true
 	}
 	st.symbols[name] = &symbolNode{
 		name:    name,
@@ -114,6 +122,9 @@ func (st *symbolTable) Lookup(name string) (*symbolNode, bool) {
 	sym, ok := st.symbols[name]
 	if ok && sym.kind == "alias" {
 		sym, ok = st.symbols[sym.literal]
+	}
+	if ok && sym.kind == "undefined" {
+		return nil, false
 	}
 	return sym, ok
 }
