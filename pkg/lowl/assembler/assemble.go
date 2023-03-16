@@ -37,6 +37,93 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 
 		// emit the word
 		switch node.Op {
+		// this section implements op codes that have no arguments
+
+		// this section implements op codes that have 1 argument that must be a constant
+		case op.ANDL: // bit-wise AND of register A with constant or literal value
+			if minArgs := 1; len(node.Parameters) < minArgs {
+				return nil, fmt.Errorf("%d: %s: want %d args: got %d", node.Line, node.Op, minArgs, len(node.Parameters))
+			}
+			// operand must be a constant
+			switch constant := node.Parameters[0]; constant.Kind {
+			case ast.Number:
+				word.Value = constant.Number
+			default:
+				return nil, fmt.Errorf("%d: %s: %s not allowed", node.Line, node.Op, constant.Kind)
+			}
+			machine.Core[machine.PC], machine.PC = word, machine.PC+1
+		case op.CCN: // compare register C with named character
+			if minArgs := 1; len(node.Parameters) < minArgs {
+				return nil, fmt.Errorf("%d: %s: want %d args: got %d", node.Line, node.Op, minArgs, len(node.Parameters))
+			}
+			// operand must be a constant
+			switch constant := node.Parameters[0]; constant.Kind {
+			case ast.Number:
+				word.Value = constant.Number
+			case ast.Variable:
+				sym, ok := symtab.Lookup(constant.Text)
+				if !ok {
+					return nil, fmt.Errorf("%d: %s: %s %q: forward declared not implemented", node.Line, node.Op, constant.Kind, constant.Text)
+				}
+				switch sym.kind {
+				case "constant":
+					word.Value = sym.constant
+				default:
+					return nil, fmt.Errorf("%d: %s: %s: must be constant", node.Line, node.Op, constant.Text)
+				}
+			default:
+				return nil, fmt.Errorf("%d: %s: %s not allowed", node.Line, node.Op, constant.Kind)
+			}
+			machine.Core[machine.PC], machine.PC = word, machine.PC+1
+		case op.LCN: // load named character into register C
+			if minArgs := 1; len(node.Parameters) < minArgs {
+				return nil, fmt.Errorf("%d: %s: want %d args: got %d", node.Line, node.Op, minArgs, len(node.Parameters))
+			}
+			// operand must be a constant
+			switch constant := node.Parameters[0]; constant.Kind {
+			case ast.Number:
+				word.Value = constant.Number
+			case ast.Variable:
+				sym, ok := symtab.Lookup(constant.Text)
+				if !ok {
+					return nil, fmt.Errorf("%d: %s: %s %q: forward declared not implemented", node.Line, node.Op, constant.Kind, constant.Text)
+				}
+				switch sym.kind {
+				case "constant":
+					word.Value = sym.constant
+				default:
+					return nil, fmt.Errorf("%d: %s: %s: must be constant", node.Line, node.Op, constant.Text)
+				}
+			default:
+				return nil, fmt.Errorf("%d: %s: %s not allowed", node.Line, node.Op, constant.Kind)
+			}
+			machine.Core[machine.PC], machine.PC = word, machine.PC+1
+		case op.NCH: // allocate memory and initialize it with a named character
+			word.Op = op.HALT // non-executable instruction!
+			if minArgs := 1; len(node.Parameters) < minArgs {
+				return nil, fmt.Errorf("%d: %s: want %d args: got %d", node.Line, node.Op, minArgs, len(node.Parameters))
+			}
+			// operand must be a constant
+			switch constant := node.Parameters[0]; constant.Kind {
+			case ast.Number:
+				word.Value = constant.Number
+			case ast.Variable:
+				sym, ok := symtab.Lookup(constant.Text)
+				if !ok {
+					return nil, fmt.Errorf("%d: %s: %s %q: forward declared not implemented", node.Line, node.Op, constant.Kind, constant.Text)
+				}
+				switch sym.kind {
+				case "constant":
+					word.Value = sym.constant
+				default:
+					return nil, fmt.Errorf("%d: %s: %s: must be constant", node.Line, node.Op, constant.Text)
+				}
+			default:
+				return nil, fmt.Errorf("%d: %s: %s not allowed", node.Line, node.Op, constant.Kind)
+			}
+			machine.Core[machine.PC], machine.PC = word, machine.PC+1
+
+		// this section implements op codes that have one argument which must be n-of
 		case op.AAL: // add n-of value to register A
 			if minArgs := 1; len(node.Parameters) < minArgs {
 				return nil, fmt.Errorf("%d: %s: want %d args: got %d", node.Line, node.Op, minArgs, len(node.Parameters))
@@ -52,9 +139,58 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 			case ast.Number:
 				word.Value = nOF.Number
 			default:
-				return nil, fmt.Errorf("%d: %s: %s: not implemented", node.Line, node.Op, nOF.Kind)
+				return nil, fmt.Errorf("%d: %s: %s not allowed", node.Line, node.Op, nOF.Kind)
 			}
 			machine.Core[machine.PC], machine.PC = word, machine.PC+1
+		case op.CAL: // compare register A with n-of
+			if minArgs := 1; len(node.Parameters) < minArgs {
+				return nil, fmt.Errorf("%d: %s: want %d args: got %d", node.Line, node.Op, minArgs, len(node.Parameters))
+			}
+			nOF := node.Parameters[0]
+			switch nOF.Kind {
+			case ast.Macro:
+				value, err := evalMacro(nOF.Text, node.Parameters[1:], symtab.GetEnv())
+				if err != nil {
+					return nil, fmt.Errorf("%d: %s: %s %s: %w", node.Line, node.Op, nOF.Kind, nOF.Text, err)
+				}
+				word.Value = value
+			case ast.Number:
+				word.Value = nOF.Number
+			case ast.Variable:
+				// variable must be a constant
+				if sym, ok := symtab.Lookup(nOF.Text); !ok {
+					return nil, fmt.Errorf("%d: %s: %s: forward declaration not allowed", node.Line, node.Op, nOF.Text)
+				} else if sym.kind != "constant" {
+					return nil, fmt.Errorf("%d: %s: %s: must be constant", node.Line, node.Op, nOF.Text)
+				} else {
+					word.Value = sym.constant
+				}
+			default:
+				return nil, fmt.Errorf("%d: %s: %s not allowed", node.Line, node.Op, nOF.Kind)
+			}
+			machine.Core[machine.PC], machine.PC = word, machine.PC+1
+		case op.LAL, op.SAL:
+			// LAL load register A with n-of
+			// SAL subtract n-of from register A
+			if minArgs := 1; len(node.Parameters) < minArgs {
+				return nil, fmt.Errorf("%d: %s: want %d args: got %d", node.Line, node.Op, minArgs, len(node.Parameters))
+			}
+			nOF := node.Parameters[0]
+			switch nOF.Kind {
+			case ast.Macro:
+				value, err := evalMacro(nOF.Text, node.Parameters[1:], symtab.GetEnv())
+				if err != nil {
+					return nil, fmt.Errorf("%d: %s: %s %s: %w", node.Line, node.Op, nOF.Kind, nOF.Text, err)
+				}
+				word.Value = value
+			case ast.Number:
+				word.Value = nOF.Number
+			default:
+				return nil, fmt.Errorf("%d: %s: %s: not allowed", node.Line, node.Op, nOF.Kind)
+			}
+			machine.Core[machine.PC], machine.PC = word, machine.PC+1
+
+		// all other op codes
 		case op.AAV: // add variable V to register A
 			if minArgs := 1; len(node.Parameters) < minArgs {
 				return nil, fmt.Errorf("%d: %s: want %d args: got %d", node.Line, node.Op, minArgs, len(node.Parameters))
@@ -65,18 +201,6 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 				symtab.UpdateAddress(v.Text, machine.PC)
 			default:
 				return nil, fmt.Errorf("%d: %s: %s: not implemented", node.Line, node.Op, v.Kind)
-			}
-			machine.Core[machine.PC], machine.PC = word, machine.PC+1
-		case op.ANDL: // bit-wise AND of register A with constant or literal value
-			if minArgs := 1; len(node.Parameters) < minArgs {
-				return nil, fmt.Errorf("%d: %s: want %d args: got %d", node.Line, node.Op, minArgs, len(node.Parameters))
-			}
-			constant := node.Parameters[0]
-			switch constant.Kind {
-			case ast.Number:
-				// no special action needed
-			default:
-				return nil, fmt.Errorf("%d: %s: %s: not implemented", node.Line, node.Op, constant.Kind)
 			}
 			machine.Core[machine.PC], machine.PC = word, machine.PC+1
 		case op.ANDV: // bit-wise AND of register A with variable V
@@ -113,33 +237,6 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 				return nil, fmt.Errorf("%d: %s: %s: not implemented", node.Line, node.Op, nOF.Kind)
 			}
 			machine.Core[machine.PC], machine.PC = word, machine.PC+1
-		case op.CAL: // compare register A with constant or the value of an expression
-			if minArgs := 1; len(node.Parameters) < minArgs {
-				return nil, fmt.Errorf("%d: %s: want %d args: got %d", node.Line, node.Op, minArgs, len(node.Parameters))
-			}
-			nOF := node.Parameters[0]
-			switch nOF.Kind {
-			case ast.Macro:
-				value, err := evalMacro(nOF.Text, node.Parameters[1:], symtab.GetEnv())
-				if err != nil {
-					return nil, fmt.Errorf("%d: %s: %s %s: %w", node.Line, node.Op, nOF.Kind, nOF.Text, err)
-				}
-				word.Value = value
-			case ast.Number:
-				word.Value = nOF.Number
-			case ast.Variable:
-				// variable must be a constant
-				if sym, ok := symtab.Lookup(nOF.Text); !ok {
-					return nil, fmt.Errorf("%d: %s: %s: forward declaration not allowed", node.Line, node.Op, nOF.Text)
-				} else if sym.kind != "constant" {
-					return nil, fmt.Errorf("%d: %s: %s: must be constant", node.Line, node.Op, nOF.Text)
-				} else {
-					word.Value = sym.constant
-				}
-			default:
-				return nil, fmt.Errorf("%d: %s: %s: not implemented", node.Line, node.Op, nOF.Kind)
-			}
-			machine.Core[machine.PC], machine.PC = word, machine.PC+1
 		case op.CAV: // compare register A with variable V
 			if minArgs := 1; len(node.Parameters) < minArgs {
 				return nil, fmt.Errorf("%d: %s: want %d args: got %d", node.Line, node.Op, minArgs, len(node.Parameters))
@@ -170,25 +267,6 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 				symtab.UpdateAddress(v.Text, machine.PC)
 			default:
 				return nil, fmt.Errorf("%d: %s: %s: not implemented", node.Line, node.Op, v.Kind)
-			}
-			machine.Core[machine.PC], machine.PC = word, machine.PC+1
-		case op.CCN: // compare register C with named character
-			if minArgs := 1; len(node.Parameters) < minArgs {
-				return nil, fmt.Errorf("%d: %s: want %d args: got %d", node.Line, node.Op, minArgs, len(node.Parameters))
-			}
-			constant := node.Parameters[0]
-			switch constant.Kind {
-			case ast.Variable:
-				// must be a constant
-				if sym, ok := symtab.Lookup(constant.Text); !ok {
-					return nil, fmt.Errorf("%d: %s: %s: forward declaration not allowed", node.Line, node.Op, constant.Text)
-				} else if sym.kind != "constant" {
-					return nil, fmt.Errorf("%d: %s: %s: must be constant", node.Line, node.Op, constant.Text)
-				} else {
-					word.Value = sym.constant
-				}
-			default:
-				return nil, fmt.Errorf("%d: %s: %s: not implemented", node.Line, node.Op, constant.Kind)
 			}
 			machine.Core[machine.PC], machine.PC = word, machine.PC+1
 		case op.CON: // allocate memory and initialize it
@@ -354,24 +432,6 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 				return nil, fmt.Errorf("%d: %s: %s not implemented", node.Line, node.Op, rxFlag.Kind)
 			}
 			machine.Core[machine.PC], machine.PC = word, machine.PC+1
-		case op.LAL: // load register A with constant or the value of an expression
-			if minArgs := 1; len(node.Parameters) < minArgs {
-				return nil, fmt.Errorf("%d: %s: want %d args: got %d", node.Line, node.Op, minArgs, len(node.Parameters))
-			}
-			nOF := node.Parameters[0]
-			switch nOF.Kind {
-			case ast.Macro:
-				value, err := evalMacro(nOF.Text, node.Parameters[1:], symtab.GetEnv())
-				if err != nil {
-					return nil, fmt.Errorf("%d: %s: %s %s: %w", node.Line, node.Op, nOF.Kind, nOF.Text, err)
-				}
-				word.Value = value
-			case ast.Number:
-				word.Value = nOF.Number
-			default:
-				return nil, fmt.Errorf("%d: %s: %s: not implemented", node.Line, node.Op, nOF.Kind)
-			}
-			machine.Core[machine.PC], machine.PC = word, machine.PC+1
 		case op.LAM: // load register A from register B modified by n-of
 			if minArgs := 1; len(node.Parameters) < minArgs {
 				return nil, fmt.Errorf("%d: %s: want %d args: got %d", node.Line, node.Op, minArgs, len(node.Parameters))
@@ -421,25 +481,6 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 				// no special action needed
 			}
 			machine.Core[machine.PC], machine.PC = word, machine.PC+1
-		case op.LCN: // load named character into register C
-			if minArgs := 1; len(node.Parameters) < minArgs {
-				return nil, fmt.Errorf("%d: %s: want %d args: got %d", node.Line, node.Op, minArgs, len(node.Parameters))
-			}
-			constant := node.Parameters[0]
-			switch constant.Kind {
-			case ast.Variable:
-				// must be a constant
-				if sym, ok := symtab.Lookup(constant.Text); !ok {
-					return nil, fmt.Errorf("%d: %s: %s: forward declaration not allowed", node.Line, node.Op, constant.Text)
-				} else if sym.kind != "constant" {
-					return nil, fmt.Errorf("%d: %s: %s: must be constant", node.Line, node.Op, constant.Text)
-				} else {
-					word.Value = sym.constant
-				}
-			default:
-				return nil, fmt.Errorf("%d: %s: %s: not implemented", node.Line, node.Op, constant.Kind)
-			}
-			machine.Core[machine.PC], machine.PC = word, machine.PC+1
 		case op.MDLABEL: // create a label and link it to the current PC
 			name, addr := node.Parameters[0].Text, machine.PC
 			if _, ok := symtab.Lookup(name); !ok {
@@ -451,52 +492,9 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 			machine.Core[machine.PC], machine.PC = word, machine.PC+1
 		case op.NB: // ignore comments
 			// no special action needed
-		case op.NCH: // allocate memory and initialize it with a character
-			word.Op = op.HALT // non-executable instruction!
-			if minArgs := 1; len(node.Parameters) < minArgs {
-				return nil, fmt.Errorf("%d: %s: want %d args: got %d", node.Line, node.Op, minArgs, len(node.Parameters))
-			}
-			// charname must be a constant or a variable that is a constant
-			ch := node.Parameters[0]
-			switch ch.Kind {
-			case ast.Number:
-				word.Value = ch.Number
-			case ast.Variable:
-				sym, ok := symtab.Lookup(ch.Text)
-				if !ok {
-					return nil, fmt.Errorf("%d: %s: %s %q: forward declared not implemented", node.Line, node.Op, ch.Kind, ch.Text)
-				}
-				switch sym.kind {
-				case "constant":
-					word.Value = sym.constant
-				default:
-					return nil, fmt.Errorf("%d: %s: %s %q %q not implemented", node.Line, node.Op, ch.Kind, ch.Text, sym.kind)
-				}
-			default:
-				return nil, fmt.Errorf("%d: %s: %s not implemented", node.Line, node.Op, ch.Kind)
-			}
-			machine.Core[machine.PC], machine.PC = word, machine.PC+1
 		case op.PRGST: // name the machine
 			name := node.Parameters[0].Text
 			machine.Name = name
-		case op.SAL: // subtract literal or expression from register A
-			if minArgs := 1; len(node.Parameters) < minArgs {
-				return nil, fmt.Errorf("%d: %s: want %d args: got %d", node.Line, node.Op, minArgs, len(node.Parameters))
-			}
-			nOF := node.Parameters[0]
-			switch nOF.Kind {
-			case ast.Macro:
-				value, err := evalMacro(nOF.Text, node.Parameters[1:], symtab.GetEnv())
-				if err != nil {
-					return nil, fmt.Errorf("%d: %s: %s %s: %w", node.Line, node.Op, nOF.Kind, nOF.Text, err)
-				}
-				word.Value = value
-			case ast.Number:
-				word.Value = nOF.Number
-			default:
-				return nil, fmt.Errorf("%d: %s: %s: not implemented", node.Line, node.Op, nOF.Kind)
-			}
-			machine.Core[machine.PC], machine.PC = word, machine.PC+1
 		case op.SAV: // subtract variable V from register A
 			if minArgs := 1; len(node.Parameters) < minArgs {
 				return nil, fmt.Errorf("%d: %s: want %d args: got %d", node.Line, node.Op, minArgs, len(node.Parameters))
