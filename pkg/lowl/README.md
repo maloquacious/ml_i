@@ -126,11 +126,20 @@ The op codes are:
     GOSUB   subroutine name,(distance)  call subroutine.
     GOSUB   subroutine name,(X)         call subroutine.
     IDENT   V,decimal integer           equate name to integer.
+    LAA     V,D                         Load A with the address of variable V.
+    LAA     table label,C               Load A with the address of the table label
+                                        (in most implementations this will be identical
+                                        to the preceding statement).
     LAA     V,D                         load A modified (variable).
     LAA     table label,C               load A modified (table item).
+    LAI     V,(X)                       load A with value pointed at by V.
     LAI     V,(R)                       load A indirect.
     LAI     V,(X)                       load A indirect.
     LAL     N-OF                        load A with literal.
+    LAM     N-OF                        load A modified (derived)
+                                        Derive the pointer given by adding N-OF
+                                        to the contents of B, and load A with
+                                        the value pointed at by this.
     LAM     N-OF                        load A modified.
     LAV     V,(R)                       load A with variable.
     LAV     V,(X)                       load A with variable.

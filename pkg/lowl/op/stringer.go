@@ -78,8 +78,6 @@ func (op Code) String() string {
 		return "GO"
 	case GOADD:
 		return "GOADD"
-	case GOBRPC:
-		return "GOBRPC"
 	case GOEQ:
 		return "GOEQ"
 	case GOGE:
@@ -98,6 +96,8 @@ func (op Code) String() string {
 		return "GOPC"
 	case GOSUB:
 		return "GOSUB"
+	case GOTBL:
+		return "GOTBL"
 	case HALT:
 		return "HALT"
 	case IDENT:

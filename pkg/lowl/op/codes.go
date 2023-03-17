@@ -60,7 +60,6 @@ const (
 	FSTK        // push register A on forwards stack
 	GO          // unconditional branch
 	GOADD       // multi-way branch
-	GOBRPC      // branch if PC equals BranchPC
 	GOEQ        // branch if equal
 	GOGE        // branch if greater than or equal
 	GOGR        // branch if greater than
@@ -70,6 +69,7 @@ const (
 	GONE        // branch if not equal
 	GOPC        // branch if C is a punctuation character
 	GOSUB       // call subroutine
+	GOTBL       // jump table for exit instructions
 	IDENT       // equate name to integer
 	LAA         // load A modified (variable)
 	LAI         // load A indirect

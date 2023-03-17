@@ -6,43 +6,28 @@
 package assembler
 
 import (
+	"bytes"
 	"fmt"
 	"github.com/maloquacious/ml_i/pkg/lowl/ast"
 	"github.com/maloquacious/ml_i/pkg/lowl/op"
 	"github.com/maloquacious/ml_i/pkg/lowl/vm"
+	"os"
+	"sort"
 	"strings"
 )
 
 func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 	// create symbol table and initialize it with required constants
 	symtab := newSymbolTable()
-	symtab.InsertConstant("LCH", 1)       // LCH is the length (in words) of a character
-	symtab.InsertConstant("LNM", 1)       // LMN is the length (in words) of a number
-	symtab.InsertConstant("LICH", 1)      // LICH is the inverse of LCH
-	symtab.InsertConstant("NLREP", '\n')  // new-line
-	symtab.InsertConstant("QUTREP", '"')  // quote mark
-	symtab.InsertConstant("SPREP", ' ')   // space
-	symtab.InsertConstant("TABREP", '\t') // tab
+	symtab.InsertConstant(-1, "LCH", 1)       // LCH is the length (in words) of a character
+	symtab.InsertConstant(-1, "LNM", 1)       // LMN is the length (in words) of a number
+	symtab.InsertConstant(-1, "LICH", 1)      // LICH is the inverse of LCH
+	symtab.InsertConstant(-1, "NLREP", '\n')  // new-line
+	symtab.InsertConstant(-1, "QUTREP", '"')  // quote mark
+	symtab.InsertConstant(-1, "SPREP", ' ')   // space
+	symtab.InsertConstant(-1, "TABREP", '\t') // tab
 
-	machine := &vm.VM{}
-	// first instruction should be a halt. when we start running the machine,
-	// the PC will be set to the first instruction in the program.
-	machine.Core[machine.PC], machine.PC = vm.Word{Op: op.HALT}, machine.PC+1
-
-	// insert variables required by the LOWL specifications
-	for _, lvar := range []struct {
-		name  string
-		value int
-	}{
-		{"DSTPT", 0}, // destination field pointer (stack moves)
-		{"PARNM", 0}, // subroutine named parameter
-		{"SRCPT", 0}, // source field pointer (stack moves)
-	} {
-		if ok := symtab.InsertAddress(lvar.name, machine.PC); !ok {
-			return nil, fmt.Errorf("%d: setup: internal error: %s redefined", 0, lvar.name)
-		}
-		machine.Core[machine.PC], machine.PC = vm.Word{Value: lvar.value}, machine.PC+1
-	}
+	machine := vm.New()
 
 	// the current subroutine name is set whenever we get a SUBR instruction.
 	// it is used as a sanity check in the EXIT calls
@@ -50,13 +35,16 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 		name          string
 		numberOfExits int
 	}
+	jumpTable := 0
 
 	// assemble all the instructions
 	for _, node := range nodes {
 		// provide a default word for the instruction
 		word := vm.Word{Op: node.Op} // default word to the current opcode
 		// debugging
-		word.Text = fmt.Sprintf("%d: %s: %s", node.Line, node.Op.String(), node.Parameters.String())
+		word.Source.Line = node.Line
+		word.Source.Op = node.Op
+		word.Source.Parameters = node.Parameters.String()
 
 		// emit the word
 		switch node.Op {
@@ -64,13 +52,28 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 		// this section implements instructions that look like "OP"
 		case op.ALIGN:
 			// ALIGN emits no code
-		case op.BMOVE, op.BSTK, op.CFSTK, op.CSS, op.FMOVE, op.FSTK:
+		case op.BMOVE, op.FMOVE:
+			if _, ok := symtab.Lookup("DSTPT"); !ok {
+				return nil, fmt.Errorf("%d: %d: internal error: DSTPT undefined", node.Line, node.Col)
+			}
+			if _, ok := symtab.Lookup("SRCPT"); !ok {
+				return nil, fmt.Errorf("%d: %d: internal error: SRCPT undefined", node.Line, node.Col)
+			}
 			machine.Core[machine.PC], machine.PC = word, machine.PC+1
-		case op.GOBRPC: // GOBRPC should not be available to callers
-			return nil, fmt.Errorf("%d: %d: %s: internal error", node.Line, node.Col, node.Op)
+		case op.BSTK, op.CFSTK, op.FSTK:
+			if _, ok := symtab.Lookup("FFPT"); !ok {
+				return nil, fmt.Errorf("%d: %d: internal error: FFPT undefined", node.Line, node.Col)
+			}
+			if _, ok := symtab.Lookup("LFPT"); !ok {
+				return nil, fmt.Errorf("%d: %d: internal error: LFPT undefined", node.Line, node.Col)
+			}
+			machine.Core[machine.PC], machine.PC = word, machine.PC+1
+		case op.CSS:
+			machine.Core[machine.PC], machine.PC = word, machine.PC+1
 		case op.PRGEN:
 			machine.Core[machine.PC], machine.PC = vm.Word{Op: op.HALT}, machine.PC+1
-		case op.UNKNOWN:
+		case op.GOTBL, op.MDERCH, op.MDQUIT, op.NOOP, op.UNKNOWN:
+			// some op codes are not available to callers
 			return nil, fmt.Errorf("%d: %d: %s: internal error", node.Line, node.Col, node.Op)
 
 		// this section implements instructions that look like "OP (CONSTANT_VAR|NUMBER)"
@@ -140,12 +143,21 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 			}
 			switch label := node.Parameters[0]; label.Kind {
 			case ast.Variable:
-				if _, ok := symtab.Lookup(label.Text); !ok {
-					if ok := symtab.InsertAddress(label.Text, machine.PC); !ok {
-						return nil, fmt.Errorf("%d: %s: internal error: %s redefined", node.Line, node.Op, label.Kind)
-					}
-				} else {
-					symtab.UpdateAddress(label.Text, machine.PC)
+				switch label.Text {
+				case "DSTPT":
+					machine.Registers.DSTPT = machine.PC
+				case "FFPT":
+					machine.Registers.FFPT = machine.PC
+				case "LFPT":
+					machine.Registers.LFPT = machine.PC
+				case "PARNM":
+					machine.Registers.PARNM = machine.PC
+				case "SRCPT":
+					machine.Registers.SRCPT = machine.PC
+				default:
+				}
+				if ok := symtab.InsertAddress(node.Line, label.Text, machine.PC); !ok {
+					return nil, fmt.Errorf("%d: %s: internal error: %s %q redefined", node.Line, node.Op, label.Kind, label.Text)
 				}
 				word.Text = label.Text
 			default:
@@ -161,7 +173,7 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 				if _, ok := symtab.Lookup(name.Text); ok {
 					return nil, fmt.Errorf("%d: %s: internal error: %s redefined", node.Line, node.Op, name.Kind)
 				}
-				symtab.InsertAddress(name.Text, machine.PC)
+				symtab.InsertAddress(node.Line, name.Text, machine.PC)
 			default:
 				return nil, fmt.Errorf("%d: %s: %s not allowed", node.Line, node.Op, name.Kind)
 			}
@@ -175,7 +187,7 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 			switch name := node.Parameters[0]; name.Kind {
 			case ast.Variable:
 				if _, ok := symtab.Lookup(name.Text); !ok {
-					if ok := symtab.InsertAddress(name.Text, machine.PC); !ok {
+					if ok := symtab.InsertAddress(node.Line, name.Text, machine.PC); !ok {
 						return nil, fmt.Errorf("%d: %s: internal error: %s redefined", node.Line, node.Op, name.Kind)
 					}
 				} else {
@@ -216,30 +228,34 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 			if minArgs := 2; len(node.Parameters) < minArgs {
 				return nil, fmt.Errorf("%d: %s: want %d args: got %d", node.Line, node.Op, minArgs, len(node.Parameters))
 			}
-			switch v := node.Parameters[0]; v.Kind {
+			switch label := node.Parameters[0]; label.Kind {
 			case ast.Variable:
-				symtab.UpdateAddress(v.Text, machine.PC)
+				switch label.Text {
+				case "MDERCH": // special action needed MD functions
+					word.Op = op.MDERCH
+				case "MDQUIT": // special action needed MD functions
+					word.Op = op.MDQUIT
+				default:
+					symtab.AddReference(label.Text, machine.PC)
+				}
 			default:
-				return nil, fmt.Errorf("%d: %s: %s: not allowed", node.Line, node.Op, v.Kind)
+				return nil, fmt.Errorf("%d: %s: %s: not allowed", node.Line, node.Op, label.Kind)
 			}
 			switch flag := node.Parameters[1]; flag.Kind {
 			case ast.Number:
 				// no action needed
 			case ast.Variable:
 				switch flag.Text {
-				case "X": // calling MD-LOGIC!
-					switch node.Parameters[0].Text {
-					case "MDERCH", "MDQUIT":
-						// no action needed for known MD functions
-					default:
-						return nil, fmt.Errorf("%d: GOSUB: undefined MD %q\n", node.Line, node.Parameters[0].Text)
-					}
+				case "X":
+					// MD logic should have been handled in label code above
 				default:
-					return nil, fmt.Errorf("%d: %s: flag: want X: got %q (%q)", node.Line, node.Op, flag.Text)
+					return nil, fmt.Errorf("%d: %s: flag: want X: got %q", node.Line, node.Op, flag.Text)
 				}
 			default:
 				return nil, fmt.Errorf("%d: %s: flag: want X or NUMBER: got %q", node.Line, node.Op, flag.Kind)
 			}
+			jumpTable = 0 // reset the jump table
+			machine.Core[machine.PC], machine.PC = word, machine.PC+1
 
 		// this section implements instructions that look like "OP LABEL VARIABLE"
 		case op.EQU:
@@ -258,7 +274,7 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 			}
 			switch v := node.Parameters[1]; v.Kind {
 			case ast.Variable:
-				symtab.InsertAlias(name, v.Text)
+				symtab.InsertAlias(node.Line, name, v.Text)
 			default:
 				return nil, fmt.Errorf("%d: %s: %s not allowed", node.Line, node.Op, v.Kind)
 			}
@@ -276,8 +292,7 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 				} else if exits.Number > currSubroutine.numberOfExits {
 					return nil, fmt.Errorf("%d: %s: exit-number %d: exceeds %d", node.Line, node.Op, exits.Number, currSubroutine.numberOfExits)
 				}
-				// the machine will take the exit value and add it to the return stack index, so we must decrement it here
-				word.Value = exits.Number - 1
+				word.Value = exits.Number
 			default:
 				return nil, fmt.Errorf("%d: %s: %s not allowed", node.Line, node.Op, exits.Kind)
 			}
@@ -349,6 +364,7 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 				for _, ch := range text.Text {
 					word.Value = int(ch)
 					machine.Core[machine.PC], machine.PC = word, machine.PC+1
+					word.Source.Continuation = true
 				}
 			default:
 				return nil, fmt.Errorf("%d: %s: %s: not allowed", node.Line, node.Op, text.Kind)
@@ -356,8 +372,7 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 			// STR emits code in the text loop above
 
 		// this section implements instructions that look like "OP VARIABLE"
-		case op.AAV, op.ABV, op.ANDV, op.CCI, op.CLEAR, op.GOADD, op.LBV, op.SAV, op.SBV, op.UNSTK:
-			// implementation note: GOADD works by setting BranchPC. If GOxxx has the T flag and its PC matches BranchPC, then the branch is taken.
+		case op.AAV, op.ABV, op.ANDV, op.CCI, op.CLEAR, op.LBV, op.SAV, op.SBV, op.UNSTK:
 			if minArgs := 1; len(node.Parameters) < minArgs {
 				return nil, fmt.Errorf("%d: %s: want %d args: got %d", node.Line, node.Op, minArgs, len(node.Parameters))
 			}
@@ -367,6 +382,18 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 			default:
 				return nil, fmt.Errorf("%d: %s: %s: not allowed", node.Line, node.Op, v.Kind)
 			}
+			machine.Core[machine.PC], machine.PC = word, machine.PC+1
+		case op.GOADD:
+			if minArgs := 1; len(node.Parameters) < minArgs {
+				return nil, fmt.Errorf("%d: %s: want %d args: got %d", node.Line, node.Op, minArgs, len(node.Parameters))
+			}
+			switch v := node.Parameters[0]; v.Kind {
+			case ast.Variable:
+				symtab.AddReference(v.Text, machine.PC)
+			default:
+				return nil, fmt.Errorf("%d: %s: %s: not allowed", node.Line, node.Op, v.Kind)
+			}
+			jumpTable = 0 // reset the jump table
 			machine.Core[machine.PC], machine.PC = word, machine.PC+1
 
 		// this section implements instructions that look like "OP VARIABLE FLAG(A|X)"
@@ -486,7 +513,7 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 			}
 			switch constant := node.Parameters[1]; constant.Kind {
 			case ast.Number:
-				symtab.InsertConstant(node.Parameters[0].Text, constant.Number)
+				symtab.InsertConstant(node.Line, node.Parameters[0].Text, constant.Number)
 			default:
 				return nil, fmt.Errorf("%d: %s: want constant: got %s", node.Line, node.Op, constant.Kind)
 			}
@@ -498,7 +525,7 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 			}
 			switch v := node.Parameters[0]; v.Kind {
 			case ast.Variable:
-				symtab.UpdateAddress(v.Text, machine.PC)
+				symtab.AddReference(v.Text, machine.PC)
 			default:
 				return nil, fmt.Errorf("%d: %s: %s: not allowed", node.Line, node.Op, v.Kind)
 			}
@@ -512,9 +539,9 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 				if err != nil {
 					return nil, fmt.Errorf("%d: %s: %s %s: %w", node.Line, node.Op, nOF.Kind, nOF.Text, err)
 				}
-				word.Value = value
+				word.ValueTwo = value
 			case ast.Number:
-				word.Value = nOF.Number
+				word.ValueTwo = nOF.Number
 			case ast.Variable:
 				// variable must be a constant
 				sym, ok := symtab.Lookup(nOF.Text)
@@ -523,7 +550,7 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 				}
 				switch sym.kind {
 				case "constant":
-					word.Value = sym.constant
+					word.ValueTwo = sym.constant
 				default:
 					return nil, fmt.Errorf("%d: %s: %s: must be constant", node.Line, node.Op, nOF.Text)
 				}
@@ -564,14 +591,19 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 			case ast.Variable:
 				switch flag.Text {
 				case "C": // exit following gosub
-					// no special action needed
+					if node.Op != op.GO {
+						return nil, fmt.Errorf("%d: %s: C: not allowed", node.Line, node.Op)
+					}
+					word.Op = op.GOTBL
+					word.ValueTwo, jumpTable = jumpTable+1, jumpTable+1
 				case "T": // GOADD branch
 					if node.Op != op.GO {
 						return nil, fmt.Errorf("%d: %s: T: not allowed", node.Line, node.Op)
 					}
-					word.Op = op.GOBRPC
+					word.Op = op.GOTBL
+					word.ValueTwo, jumpTable = jumpTable, jumpTable+1
 				case "X": // nothing special
-					// no special action needed
+					jumpTable = 0 // reset the jump table
 				default:
 					return nil, fmt.Errorf("%d: %s: flag wants C|T|X: got %q", node.Line, node.Op, flag.Text)
 				}
@@ -583,6 +615,8 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 		}
 	}
 
+	machine.Registers.Last = machine.PC
+
 	// when we start running the machine, the PC should be set to the first
 	// instruction in the program. if there is no BEGIN label, the PC will
 	// point to a HALT instruction.
@@ -593,13 +627,13 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 			panic("BEGIN must be a label")
 		}
 		fmt.Printf("asm: set vm begin   %-12s %6d\n", "", sym.address)
-		machine.Start = sym.address
+		machine.Registers.Start = sym.address
 	}
 
 	// detect and report undefined symbols
 	undefinedSymbols := 0
 	for _, sym := range symtab.symbols {
-		if sym.kind != "undefined" && sym.defined {
+		if sym.kind != "undefined" && sym.line != 0 {
 			continue
 		}
 		fmt.Printf("asm: error: undefined symbol %q %q\n", sym.name, sym.kind)
@@ -616,12 +650,8 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 			for _, addr := range sym.backFill {
 				machine.Core[addr].Value = sym.address
 			}
-		case "constant":
-			for _, addr := range sym.backFill {
-				machine.Core[addr].Value = sym.constant
-			}
 		case "alias":
-			aliasOf, ok := symtab.Lookup(sym.name)
+			aliasOf, ok := symtab.Lookup(sym.alias)
 			if !ok {
 				return nil, fmt.Errorf("alias %q never defined", sym.name)
 			}
@@ -637,9 +667,48 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 			default:
 				panic(fmt.Sprintf("assert(aliasOf.kind != %q)", aliasOf.kind))
 			}
+		case "constant":
+			for _, addr := range sym.backFill {
+				machine.Core[addr].Value = sym.constant
+			}
 		default:
 			panic(fmt.Sprintf("assert(sym.kind != %q)", sym.kind))
 		}
+	}
+
+	// dump the symbol table
+	fpListing := &bytes.Buffer{}
+	var list []string
+	for _, sym := range symtab.symbols {
+		list = append(list, sym.name)
+	}
+	sort.Strings(list)
+	for _, name := range list {
+		sym := symtab.symbols[name]
+		var dfd, dfl string
+		switch {
+		case sym.line < 0:
+			dfd, dfl = " ", "****"
+		case sym.line == 0:
+			dfd, dfl = "*", "****"
+		default:
+			dfd, dfl = " ", fmt.Sprintf("%4d", sym.line)
+		}
+		switch sym.kind {
+		case "address":
+			_, _ = fmt.Fprintf(fpListing, "%s %-12s %-8s %8d  %s\n", dfd, sym.name, sym.kind, sym.address, dfl)
+		case "alias":
+			_, _ = fmt.Fprintf(fpListing, "%s %-12s %-8s %-8s  %s\n", dfd, sym.name, sym.kind, sym.alias, dfl)
+		case "constant":
+			_, _ = fmt.Fprintf(fpListing, "%s %-12s %-8s %8d  %s\n", dfd, sym.name, sym.kind, sym.constant, dfl)
+		default:
+			_, _ = fmt.Fprintf(fpListing, "%s %-12s %-8s %8d  %s\n", dfd, sym.name, sym.kind, -6_666, dfl)
+		}
+	}
+
+	_ = os.WriteFile("asm_symtab.txt", fpListing.Bytes(), 0644)
+	if err := Listing("asm_listing.txt", machine, symtab); err != nil {
+		return nil, err
 	}
 
 	return machine, nil

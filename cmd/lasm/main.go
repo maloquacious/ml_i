@@ -22,9 +22,8 @@ func main() {
 	}
 
 	if err := run(cfg); err != nil {
-		fmt.Println("")
-		fmt.Println("")
-		log.Fatal(err)
+		fmt.Printf("\n\nerror:\n%v\n\n", err)
+		log.Fatal("error")
 	}
 }
 
@@ -47,19 +46,19 @@ func run(cfg *config) error {
 	syntaxTree, err := ast.Parse(parseTree)
 	if err != nil {
 		return err
-	} else if cfg.test.astParser {
-		if err = os.WriteFile("ast.txt", syntaxTree.Listing(), 0644); err != nil {
-			return err
-		}
-		return nil
+	} else if err = syntaxTree.Listing("ast_listing.txt"); err != nil {
+		return err
 	}
 
 	vm, err := assembler.Assemble(syntaxTree)
 	if err != nil {
 		return err
 	}
-	bb := &bytes.Buffer{}
-	err = vm.Run(bb)
-	_ = os.WriteFile("vm.txt", bb.Bytes(), 0644)
+
+	stdout, stdmsg := &bytes.Buffer{}, &bytes.Buffer{}
+	err = vm.Run(stdout, stdmsg)
+	_ = os.WriteFile("vm_stdout.txt", stdout.Bytes(), 0644)
+	_ = os.WriteFile("vm_stdmsg.txt", stdmsg.Bytes(), 0644)
+
 	return err
 }

@@ -19,11 +19,12 @@ type symbolTable struct {
 }
 
 type symbolNode struct {
-	name    string // name of the symbol
-	kind    string // kind of the symbol
-	defined bool   // set to true when defined
+	name string // name of the symbol
+	kind string // kind of the symbol
+	line int    // set when the symbol is defined
 	// value of the symbol
 	address  int
+	alias    string
 	constant int
 	literal  string
 	// back-fill queue
@@ -56,41 +57,41 @@ func (st *symbolTable) GetEnv() map[string]int {
 }
 
 // InsertAddress adds a new symbol to the symbol table with its name and value.
-func (st *symbolTable) InsertAddress(name string, address int) bool {
+func (st *symbolTable) InsertAddress(line int, name string, address int) bool {
 	if sym, ok := st.symbols[name]; ok {
 		if sym.kind != "undefined" {
 			return false
 		}
-		sym.kind, sym.address, sym.defined = "address", address, true
+		sym.kind, sym.address, sym.line = "address", address, line
 		return true
 	}
 	st.symbols[name] = &symbolNode{
 		name:    name,
 		kind:    "address",
 		address: address,
-		defined: true,
+		line:    line,
 	}
 	return true
 }
 
 // InsertAlias adds a new symbol to the symbol table with its name and value.
-func (st *symbolTable) InsertAlias(name string, text string) bool {
+func (st *symbolTable) InsertAlias(line int, name string, text string) bool {
 	if sym, ok := st.symbols[name]; ok {
 		return false
 	} else if sym, ok = st.symbols[text]; ok && sym.kind == "alias" {
 		panic(fmt.Sprintf("alias %q references alias %q", name, text))
 	}
 	st.symbols[name] = &symbolNode{
-		name:    name,
-		kind:    "alias",
-		literal: text,
-		defined: true,
+		name:  name,
+		kind:  "alias",
+		alias: text,
+		line:  line,
 	}
 	return true
 }
 
 // InsertConstant adds a new symbol to the symbol table with its name and value.
-func (st *symbolTable) InsertConstant(name string, number int) bool {
+func (st *symbolTable) InsertConstant(line int, name string, number int) bool {
 	if _, ok := st.symbols[name]; ok {
 		return false
 	}
@@ -98,13 +99,13 @@ func (st *symbolTable) InsertConstant(name string, number int) bool {
 		name:     name,
 		kind:     "constant",
 		constant: number,
-		defined:  true,
+		line:     line,
 	}
 	return true
 }
 
 // InsertLiteral adds a new symbol to the symbol table with its name and value.
-func (st *symbolTable) InsertLiteral(name string, text string) bool {
+func (st *symbolTable) InsertLiteral(line int, name string, text string) bool {
 	if _, ok := st.symbols[name]; ok {
 		return false
 	}
@@ -112,7 +113,7 @@ func (st *symbolTable) InsertLiteral(name string, text string) bool {
 		name:    name,
 		kind:    "literal",
 		literal: text,
-		defined: true,
+		line:    line,
 	}
 	return true
 }
@@ -121,7 +122,7 @@ func (st *symbolTable) InsertLiteral(name string, text string) bool {
 func (st *symbolTable) Lookup(name string) (*symbolNode, bool) {
 	sym, ok := st.symbols[name]
 	if ok && sym.kind == "alias" {
-		sym, ok = st.symbols[sym.literal]
+		sym, ok = st.symbols[sym.alias]
 	}
 	if ok && sym.kind == "undefined" {
 		return nil, false

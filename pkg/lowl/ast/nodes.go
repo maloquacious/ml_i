@@ -15,16 +15,12 @@ type Nodes []*Node
 
 func Parse(parseTree []*cst.Node) (Nodes, error) {
 	var nodes Nodes
-	var node *Node
 	for _, cnode := range parseTree {
 		switch cnode.Kind {
 		case cst.Error:
 			return nil, cnode.Error
 		case cst.Label:
-			if node != nil {
-				nodes = append(nodes, node)
-			}
-			nodes = append(nodes, &Node{
+			node := &Node{
 				Line: cnode.Line,
 				Col:  cnode.Col,
 				Op:   op.MDLABEL,
@@ -32,13 +28,13 @@ func Parse(parseTree []*cst.Node) (Nodes, error) {
 					Line: cnode.Line,
 					Col:  cnode.Col,
 					Kind: Label,
-					Text: cnode.String}}})
+					Text: cnode.String}}}
+			nodes = append(nodes, node)
 		case cst.OpCode:
-			node = &Node{
+			node := &Node{
 				Line: cnode.Line,
 				Col:  cnode.Col,
-				Op:   cnode.OpCode,
-			}
+				Op:   cnode.OpCode}
 			// add the parameters to the op-code
 			for _, cparm := range cnode.Parameters {
 				parm := &Parameter{Line: cparm.Line, Col: cparm.Col}

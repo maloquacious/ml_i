@@ -8,9 +8,10 @@ import (
 	"bytes"
 	"fmt"
 	"github.com/maloquacious/ml_i/pkg/lowl/op"
+	"os"
 )
 
-func (nodes Nodes) Listing() []byte {
+func (nodes Nodes) Listing(name string) error {
 	bb := &bytes.Buffer{}
 	for _, node := range nodes {
 		blabel := ""
@@ -19,5 +20,5 @@ func (nodes Nodes) Listing() []byte {
 		}
 		_, _ = fmt.Fprintf(bb, "%-12s %-12s %-55s ;; %4d\n", blabel, node.Op, node.Parameters.String(), node.Line)
 	}
-	return bb.Bytes()
+	return os.WriteFile(name, bb.Bytes(), 0644)
 }

@@ -4,6 +4,8 @@
 
 package vm
 
+import "fmt"
+
 type CMPRSLT int
 
 // enums for CMPAT
@@ -13,12 +15,25 @@ const (
 	IS_GR CMPRSLT = 1  // register is greater than value
 )
 
-func (m *VM) compareA(v int) {
-	if m.A < v {
-		m.ACmp = IS_LT
-	} else if m.A == v {
-		m.ACmp = IS_EQ
+func (m *VM) compare(r, v int) {
+	if r < v {
+		m.Cmp = IS_LT
+	} else if r > v {
+		m.Cmp = IS_GR
 	} else {
-		m.ACmp = IS_GR
+		m.Cmp = IS_EQ
 	}
+}
+
+// String implements the Stringer interface.
+func (r CMPRSLT) String() string {
+	switch r {
+	case IS_LT:
+		return "<<"
+	case IS_EQ:
+		return "=="
+	case IS_GR:
+		return ">>"
+	}
+	panic(fmt.Sprintf("assert(cmprslt != %d)", r))
 }
