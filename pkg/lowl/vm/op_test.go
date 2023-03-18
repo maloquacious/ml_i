@@ -44,6 +44,7 @@ func TestVM(t *testing.T) {
 
 	newvm := func() {
 		m = &vm.VM{PC: input.PC, A: input.A, B: input.B, C: input.C}
+		m.Registers.Cmp = input.Cmp
 		if input.V.address != 0 {
 			m.SetWord(input.V.address, vm.Word{Op: op.CON, Value: input.V.value})
 		}
@@ -162,8 +163,10 @@ func TestVM(t *testing.T) {
 	m.SetWord(0, vm.Word{Op: opc, Value: input.V.address})
 	test(nil, nil)
 
-	t.Errorf("%s: not tested\n", op.BMOVE)
-	t.Errorf("%s: not tested\n", op.BSTK)
+	opc = op.BMOVE
+	t.Errorf("%s: not tested\n", opc)
+	opc = op.BSTK
+	t.Errorf("%s: not tested\n", opc)
 
 	opc = op.BUMP
 	input = input_t{A: 3, B: 12, C: 49, V: val_t{1, 11}, V2: val_t{value: 2}}
@@ -257,7 +260,8 @@ func TestVM(t *testing.T) {
 	m.SetWord(0, vm.Word{Op: opc, Value: input.V.value})
 	test(nil, nil)
 
-	t.Errorf("%s: not tested\n", op.CFSTK)
+	opc = op.CFSTK
+	t.Errorf("%s: not tested\n", opc)
 
 	opc = op.CLEAR
 	input = input_t{A: 3, B: 12, C: 49, V: val_t{1, 11}}
@@ -277,7 +281,8 @@ func TestVM(t *testing.T) {
 		t.Errorf("%s: want invalid op: got %v\n", opc, err)
 	}
 
-	t.Errorf("%s: not tested\n", op.CSS)
+	opc = op.CSS
+	t.Errorf("%s: not tested\n", opc)
 
 	opc = op.DCL
 	input = input_t{}
@@ -301,20 +306,161 @@ func TestVM(t *testing.T) {
 		t.Errorf("%s: want invalid op: got %v\n", opc, err)
 	}
 
-	t.Errorf("%s: not tested\n", op.EXIT)
-	t.Errorf("%s: not tested\n", op.FMOVE)
-	t.Errorf("%s: not tested\n", op.FSTK)
-	t.Errorf("%s: not tested\n", op.GO)
-	t.Errorf("%s: not tested\n", op.GOADD)
-	t.Errorf("%s: not tested\n", op.GOEQ)
-	t.Errorf("%s: not tested\n", op.GOGE)
-	t.Errorf("%s: not tested\n", op.GOGR)
-	t.Errorf("%s: not tested\n", op.GOLE)
-	t.Errorf("%s: not tested\n", op.GOND)
-	t.Errorf("%s: not tested\n", op.GONE)
-	t.Errorf("%s: not tested\n", op.GOPC)
-	t.Errorf("%s: not tested\n", op.GOSUB)
-	t.Errorf("%s: not tested\n", op.GOTBL)
+	opc = op.EXIT
+	t.Errorf("%s: not tested\n", opc)
+	opc = op.FMOVE
+	t.Errorf("%s: not tested\n", opc)
+	opc = op.FSTK
+	t.Errorf("%s: not tested\n", opc)
+
+	opc = op.GO
+	input = input_t{Cmp: vm.IS_LT}
+	expect = expect_t{PC: 8, Cmp: input.Cmp}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: 8})
+	test(nil, nil)
+	input = input_t{Cmp: vm.IS_EQ}
+	expect = expect_t{PC: 8, Cmp: input.Cmp}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: 8})
+	test(nil, nil)
+	input = input_t{Cmp: vm.IS_GR}
+	expect = expect_t{PC: 8, Cmp: input.Cmp}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: 8})
+	test(nil, nil)
+
+	opc = op.GOADD
+	t.Errorf("%s: not tested\n", opc)
+	//input = input_t{}
+	//expect = expect_t{PC: 8}
+	//newvm()
+	//m.SetWord(0, vm.Word{Op: opc, Value: 8})
+	//test(nil, nil)
+
+	opc = op.GOEQ
+	input = input_t{Cmp: vm.IS_LT}
+	expect = expect_t{PC: 1, Cmp: input.Cmp}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: 8})
+	test(nil, nil)
+	input = input_t{Cmp: vm.IS_EQ}
+	expect = expect_t{PC: 8, Cmp: input.Cmp}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: 8})
+	test(nil, nil)
+	input = input_t{Cmp: vm.IS_GR}
+	expect = expect_t{PC: 1, Cmp: input.Cmp}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: 8})
+	test(nil, nil)
+
+	opc = op.GOGE
+	input = input_t{Cmp: vm.IS_LT}
+	expect = expect_t{PC: 1, Cmp: input.Cmp}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: 8})
+	test(nil, nil)
+	input = input_t{Cmp: vm.IS_EQ}
+	expect = expect_t{PC: 8, Cmp: input.Cmp}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: 8})
+	test(nil, nil)
+	input = input_t{Cmp: vm.IS_GR}
+	expect = expect_t{PC: 8, Cmp: input.Cmp}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: 8})
+	test(nil, nil)
+
+	opc = op.GOGR
+	input = input_t{Cmp: vm.IS_LT}
+	expect = expect_t{PC: 1, Cmp: input.Cmp}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: 8})
+	test(nil, nil)
+	input = input_t{Cmp: vm.IS_EQ}
+	expect = expect_t{PC: 1, Cmp: input.Cmp}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: 8})
+	test(nil, nil)
+	input = input_t{Cmp: vm.IS_GR}
+	expect = expect_t{PC: 8, Cmp: input.Cmp}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: 8})
+	test(nil, nil)
+
+	opc = op.GOLE
+	input = input_t{Cmp: vm.IS_LT}
+	expect = expect_t{PC: 8, Cmp: input.Cmp}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: 8})
+	test(nil, nil)
+	input = input_t{Cmp: vm.IS_EQ}
+	expect = expect_t{PC: 8, Cmp: input.Cmp}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: 8})
+	test(nil, nil)
+	input = input_t{Cmp: vm.IS_GR}
+	expect = expect_t{PC: 1, Cmp: input.Cmp}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: 8})
+	test(nil, nil)
+
+	opc = op.GOND
+	input = input_t{C: '0'}
+	expect = expect_t{PC: 1, A: 0, C: '0'}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: 8})
+	test(nil, nil)
+	input = input_t{C: '9'}
+	expect = expect_t{PC: 1, A: 9, C: '9'}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: 8})
+	test(nil, nil)
+	input = input_t{C: 'A'}
+	expect = expect_t{PC: 8, C: 'A'}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: 8})
+	test(nil, nil)
+
+	opc = op.GONE
+	input = input_t{Cmp: vm.IS_LT}
+	expect = expect_t{PC: 8, Cmp: input.Cmp}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: 8})
+	test(nil, nil)
+	input = input_t{Cmp: vm.IS_EQ}
+	expect = expect_t{PC: 1, Cmp: input.Cmp}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: 8})
+	test(nil, nil)
+	input = input_t{Cmp: vm.IS_GR}
+	expect = expect_t{PC: 8, Cmp: input.Cmp}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: 8})
+	test(nil, nil)
+
+	opc = op.GOPC
+	input = input_t{C: '0'}
+	expect = expect_t{PC: 1, C: '0'}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: 8})
+	test(nil, nil)
+	input = input_t{C: 'A'}
+	expect = expect_t{PC: 1, C: 'A'}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: 8})
+	test(nil, nil)
+	input = input_t{C: '$'}
+	expect = expect_t{PC: 8, C: '$'}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: 8})
+	test(nil, nil)
+
+	opc = op.GOSUB
+	t.Errorf("%s: not tested\n", opc)
+	opc = op.GOTBL
+	t.Errorf("%s: not tested\n", opc)
 
 	opc = op.HALT
 	input = input_t{A: 3, B: 4, C: 5}
@@ -489,7 +635,16 @@ func TestVM(t *testing.T) {
 		t.Errorf("%s: want invalid op: got %v\n", opc, err)
 	}
 
-	t.Errorf("%s: not tested\n", op.NCH)
+	opc = op.NCH
+	input = input_t{}
+	expect = expect_t{PC: 1}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc})
+	if err := m.Step(nil, nil); err == nil {
+		t.Errorf("%s: want invalid op: got nil\n", opc)
+	} else if !errors.Is(err, vm.ErrInvalidOp) {
+		t.Errorf("%s: want invalid op: got %v\n", opc, err)
+	}
 
 	opc = op.NOOP
 	input = input_t{A: 3, B: 4, C: 5}
@@ -498,8 +653,10 @@ func TestVM(t *testing.T) {
 	m.SetWord(0, vm.Word{Op: opc, Value: input.V.value})
 	test(nil, nil)
 
-	t.Errorf("%s: not tested\n", op.PRGEN)
-	t.Errorf("%s: not tested\n", op.PRGST)
+	opc = op.PRGEN
+	t.Errorf("%s: not tested\n", opc)
+	opc = op.PRGST
+	t.Errorf("%s: not tested\n", opc)
 
 	opc = op.SAL
 	input = input_t{A: 3, B: 4, C: 5, V: val_t{1, 88}}
@@ -508,7 +665,12 @@ func TestVM(t *testing.T) {
 	m.SetWord(0, vm.Word{Op: opc, Value: input.V.value})
 	test(nil, nil)
 
-	t.Errorf("%s: not tested\n", op.SAV)
+	opc = op.SAV
+	input = input_t{A: 3, B: 4, C: 5, V: val_t{1, 88}}
+	expect = expect_t{PC: 1, A: input.A - input.V.value, B: input.B, C: input.C, V: input.V}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: input.V.address})
+	test(nil, nil)
 
 	opc = op.SBL
 	input = input_t{A: 3, B: 4, C: 5, V: val_t{1, 88}}
@@ -517,10 +679,40 @@ func TestVM(t *testing.T) {
 	m.SetWord(0, vm.Word{Op: opc, Value: input.V.value})
 	test(nil, nil)
 
-	t.Errorf("%s: not tested\n", op.SBV)
-	t.Errorf("%s: not tested\n", op.STI)
-	t.Errorf("%s: not tested\n", op.STR)
-	t.Errorf("%s: not tested\n", op.STV)
-	t.Errorf("%s: not tested\n", op.SUBR)
-	t.Errorf("%s: not tested\n", op.UNSTK)
+	opc = op.SBV
+	input = input_t{A: 3, B: 4, C: 5, V: val_t{1, 88}}
+	expect = expect_t{PC: 1, A: input.A, B: input.B - input.V.value, C: input.C, V: val_t{1, input.V.value}}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: input.V.address})
+	test(nil, nil)
+
+	opc = op.STI
+	input = input_t{A: 3, B: 4, C: 5, V: val_t{1, 21}, V2: val_t{21, 144}}
+	expect = expect_t{PC: 1, A: input.A, B: input.B, C: input.C, V: input.V, V2: val_t{input.V2.address, input.A}}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: input.V.address})
+	test(nil, nil)
+
+	opc = op.STR
+	input = input_t{}
+	expect = expect_t{PC: 1}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc})
+	if err := m.Step(nil, nil); err == nil {
+		t.Errorf("%s: want invalid op: got nil\n", opc)
+	} else if !errors.Is(err, vm.ErrInvalidOp) {
+		t.Errorf("%s: want invalid op: got %v\n", opc, err)
+	}
+
+	opc = op.STV
+	input = input_t{A: 3, B: 4, C: 5, V: val_t{1, 88}}
+	expect = expect_t{PC: 1, A: input.A, B: input.B, C: input.C, V: val_t{1, input.A}}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: input.V.address})
+	test(nil, nil)
+
+	opc = op.SUBR
+	t.Errorf("%s: not tested\n", opc)
+	opc = op.UNSTK
+	t.Errorf("%s: not tested\n", opc)
 }

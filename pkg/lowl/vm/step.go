@@ -125,10 +125,10 @@ func (m *VM) Step(stdout, stderr io.Writer) error {
 			m.PC = w.Value
 		}
 	case op.GOND: // branch if C is not a digit; otherwise put value in A
-		if isdigit(byte(m.C)) {
-			m.A = m.C
-		} else {
+		if !isdigit(byte(m.C)) {
 			m.PC = w.Value
+		} else {
+			m.A = m.C - '0'
 		}
 	case op.GONE: // branch if not equal
 		if m.Registers.Cmp != IS_EQ {
