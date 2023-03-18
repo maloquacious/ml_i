@@ -6,7 +6,6 @@ package vm
 
 import (
 	"errors"
-	"fmt"
 	"io"
 )
 
@@ -36,10 +35,3 @@ func (m *VM) Run(fp, msg io.Writer) error {
 	}
 	return ErrCycles
 }
-
-var (
-	ErrCycles    = fmt.Errorf("too many cycles")
-	ErrHalted    = fmt.Errorf("halted")
-	ErrInvalidOp = fmt.Errorf("invalid op")
-	ErrQuit      = fmt.Errorf("quit")
-)

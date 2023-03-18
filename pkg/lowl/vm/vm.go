@@ -15,12 +15,11 @@ const (
 )
 
 type VM struct {
-	Name    string // name of the virtual machine
-	PC      int
-	A, B, C int
-	Cmp     CMPRSLT
-	// Registers aren't registers so much as reserved addresses
+	Name      string // name of the virtual machine
+	PC        int
+	A, B, C   int
 	Registers struct {
+		Cmp         CMPRSLT
 		DSTPT       int // points to the variable holding the destination field pointer (stack moves)
 		FFPT        int // points to the variable holding the first free location of the forwards stack
 		LFPT        int // points to the variable holding the last location in use on the backwards stack

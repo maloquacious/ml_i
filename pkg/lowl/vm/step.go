@@ -27,7 +27,7 @@ func (m *VM) Step(stdout, stderr io.Writer) error {
 	case op.ABV: // add a variable to register B
 		m.B = m.B + m.directLoad(w.Value)
 	case op.ALIGN: // align A up to next boundary
-		return fmt.Errorf("%d: %+v\n", m.PC-1, w)
+		return fmt.Errorf("%d: %s: %w\n", m.PC-1, w.Op, ErrInvalidOp)
 	case op.ANDL: // bitwise "AND" a number with register A
 		m.A = m.A & w.Value
 	case op.ANDV: // bitwise AND a variable with register A
@@ -44,20 +44,20 @@ func (m *VM) Step(stdout, stderr io.Writer) error {
 		ffpt, lfpt := m.directLoad(m.Registers.FFPT), m.directLoad(m.Registers.LFPT)
 		lfpt = lfpt - 1     // decrement before pushing
 		if ffpt+1 >= lfpt { // ERLSO
-			return fmt.Errorf("%d: FS underflow", m.PC-1)
+			return fmt.Errorf("%d: FS: %w", m.PC-1, ErrStackUnderflow)
 		}
 		m.Stack[lfpt] = m.A
 		m.directStore(m.Registers.LFPT, lfpt)
 	case op.BUMP: // increase a variable by an amount
 		m.directStore(w.Value, m.directLoad(w.Value)+w.ValueTwo)
-	case op.CAI: // compare A m.indirect signed integer or // compare A with m.indirect address
-		m.compare(m.A, m.indirectLoad(w.Value))
+	case op.CAI: // compare contents of address pointed to by V to register A
+		m.compare(m.A, m.directLoad(w.Value))
 	case op.CAL: // compare register A with number
 		m.compare(m.A, w.Value)
-	case op.CAV: // compare register A to a variable
-		m.compare(m.A, m.directLoad(w.Value))
-	case op.CCI: // compare register C m.indirect
-		m.compare(m.C, m.indirectLoad(w.Value))
+	case op.CAV: // compare address of V with register A
+		m.compare(m.A, w.Value)
+	case op.CCI: // compare contents of address pointed to by V to register C
+		m.compare(m.C, m.directLoad(w.Value))
 	case op.CCL: // compare register C with a number
 		m.compare(m.C, w.Value)
 	case op.CCN: // compare register C with named character
@@ -65,20 +65,20 @@ func (m *VM) Step(stdout, stderr io.Writer) error {
 	case op.CFSTK: // stack C on forwards stack
 		ffpt, lfpt := m.directLoad(m.Registers.FFPT), m.directLoad(m.Registers.LFPT)
 		if ffpt+1 >= lfpt { // ERLSO
-			return fmt.Errorf("%d: FS overflow", m.PC-1)
+			return fmt.Errorf("%d: FS: %w", m.PC-1, ErrStackOverflow)
 		}
 		m.Stack[ffpt], ffpt = m.C, ffpt+1
 		m.directStore(m.Registers.FFPT, ffpt)
 	case op.CLEAR: // set variable to zero
 		m.directStore(w.Value, 0)
 	case op.CON: // numerical constant
-		return fmt.Errorf("%d: %+v\n", m.PC-1, w)
+		return fmt.Errorf("%d: %s: %w\n", m.PC-1, w.Op, ErrInvalidOp)
 	case op.CSS: // pop address of the subroutine stack
 		m.RS = m.RS[:len(m.RS)-1]
 	case op.DCL: // declare variable
-		return fmt.Errorf("%d: executing %q", m.PC-1, w.Op)
+		return fmt.Errorf("%d: %s: %w\n", m.PC-1, w.Op, ErrInvalidOp)
 	case op.EQU: // equate two variables
-		return fmt.Errorf("%d: %+v\n", m.PC-1, w)
+		return fmt.Errorf("%d: %s: %w\n", m.PC-1, w.Op, ErrInvalidOp)
 	case op.EXIT: // exit from subroutine
 		// pop the return address from the stack
 		m.PC, m.RS = m.RS[len(m.RS)-1], m.RS[:len(m.RS)-1]
@@ -95,7 +95,7 @@ func (m *VM) Step(stdout, stderr io.Writer) error {
 	case op.FSTK: // stack A on forwards stack
 		ffpt, lfpt := m.directLoad(m.Registers.FFPT), m.directLoad(m.Registers.LFPT)
 		if ffpt+1 >= lfpt { // ERLSO
-			return fmt.Errorf("%d: FS overflow", m.PC-1)
+			return fmt.Errorf("%d: FS: %w", m.PC-1, ErrStackOverflow)
 		}
 		m.Stack[ffpt], ffpt = m.A, ffpt+1
 		m.directStore(m.Registers.FFPT, ffpt)
@@ -105,23 +105,23 @@ func (m *VM) Step(stdout, stderr io.Writer) error {
 	case op.GOADD: // multi-way branch
 		m.Registers.JumpValue = m.directLoad(w.Value)
 	case op.GOEQ: // branch if equal
-		if m.Cmp == IS_EQ {
+		if m.Registers.Cmp == IS_EQ {
 			m.PC = w.Value
 		}
 	case op.GOGE: // branch if greater than or equal
-		if m.Cmp == IS_GR || m.Cmp == IS_EQ {
+		if m.Registers.Cmp == IS_GR || m.Registers.Cmp == IS_EQ {
 			m.PC = w.Value
 		}
 	case op.GOGR: // branch if greater than
-		if m.Cmp == IS_GR {
+		if m.Registers.Cmp == IS_GR {
 			m.PC = w.Value
 		}
 	case op.GOLE: // branch if less than or equal
-		if m.Cmp == IS_LT || m.Cmp == IS_EQ {
+		if m.Registers.Cmp == IS_LT || m.Registers.Cmp == IS_EQ {
 			m.PC = w.Value
 		}
 	case op.GOLT: // branch if less than
-		if m.Cmp == IS_LT {
+		if m.Registers.Cmp == IS_LT {
 			m.PC = w.Value
 		}
 	case op.GOND: // branch if C is not a digit; otherwise put value in A
@@ -131,7 +131,7 @@ func (m *VM) Step(stdout, stderr io.Writer) error {
 			m.PC = w.Value
 		}
 	case op.GONE: // branch if not equal
-		if m.Cmp != IS_EQ {
+		if m.Registers.Cmp != IS_EQ {
 			m.PC = w.Value
 		}
 	case op.GOPC: // branch if C is a punctuation character
@@ -154,23 +154,23 @@ func (m *VM) Step(stdout, stderr io.Writer) error {
 		m.Registers.Halted = true
 		return ErrHalted
 	case op.IDENT: // equate name to integer
-		return fmt.Errorf("%d: %+v\n", m.PC-1, w)
+		return fmt.Errorf("%d: %s: %w\n", m.PC-1, w.Op, ErrInvalidOp)
 	case op.LAA: // load address of variable V into register A
 		m.A = w.Value
-	case op.LAI: // load contents of variable plus register A into register A
+	case op.LAI: // load contents of variable V into register A
 		m.A = m.indirectLoad(w.Value)
 	case op.LAL: // load number into register A
 		m.A = w.Value
 	case op.LAM: // load contents of address pointed to by register B + N-OF into register A
-		m.A = m.indirectLoad(m.B + w.Value)
-	case op.LAV: // load variable into register A
+		m.A = m.indexedLoad(w.Value)
+	case op.LAV: // load address of variable into register A
 		m.A = m.directLoad(w.Value)
-	case op.LBV: // load variable into register B
+	case op.LBV: // load address of variable into register B
 		m.B = m.directLoad(w.Value)
-	case op.LCI: // load contents of variable plus register C into register C
+	case op.LCI: // load contents of variable V into register C
 		m.C = m.indirectLoad(w.Value)
-	case op.LCM: // load C modified
-		m.C = m.indirectLoad(m.B + w.Value)
+	case op.LCM: // load contents of address pointed to by register B + N-OF into register C
+		m.C = m.indexedLoad(w.Value)
 	case op.LCN: // load C with named character
 		m.C = w.Value
 	case op.MDERCH: // copy register C to output stream
@@ -180,7 +180,7 @@ func (m *VM) Step(stdout, stderr io.Writer) error {
 			printf(stdout, "%s", string(byte(m.C)))
 		}
 	case op.MDLABEL:
-		return fmt.Errorf("%d: internal error: %+v", m.PC-1, w.Op)
+		return fmt.Errorf("%d: %s: %w\n", m.PC-1, w.Op, ErrInvalidOp)
 	case op.MDQUIT: // graceful exit requested
 		// force the program counter back to this instruction
 		m.PC = m.PC - 1
@@ -192,15 +192,15 @@ func (m *VM) Step(stdout, stderr io.Writer) error {
 	case op.MULTL: // multiply register A by a number
 		m.A = m.A * w.Value
 	case op.NB: // comment
-		return fmt.Errorf("%d: %+v\n", m.PC-1, w)
+		return fmt.Errorf("%d: %s: %w\n", m.PC-1, w.Op, ErrInvalidOp)
 	case op.NCH: // character constant
-		return fmt.Errorf("%d: %+v\n", m.PC-1, w)
+		return fmt.Errorf("%d: %s: %w\n", m.PC-1, w.Op, ErrInvalidOp)
 	case op.NOOP: // noop
 		// do nothing
 	case op.PRGEN: // end of logic
-		return fmt.Errorf("%d: %+v\n", m.PC-1, w)
+		return fmt.Errorf("%d: %s: %w\n", m.PC-1, w.Op, ErrInvalidOp)
 	case op.PRGST: // start of logic
-		return fmt.Errorf("%d: %+v\n", m.PC-1, w)
+		return fmt.Errorf("%d: %s: %w\n", m.PC-1, w.Op, ErrInvalidOp)
 	case op.SAL: // subtract a number from register A
 		m.A = m.A - w.Value
 	case op.SAV: // subtract a variable from register A
@@ -212,13 +212,13 @@ func (m *VM) Step(stdout, stderr io.Writer) error {
 	case op.STI: // store register A in address pointed at by variable V
 		m.indirectStore(w.Value, m.A)
 	case op.STR: // character string constant
-		return fmt.Errorf("%d: %+v\n", m.PC-1, w)
+		return fmt.Errorf("%d: %s: %w\n", m.PC-1, w.Op, ErrInvalidOp)
 	case op.STV: // store register A in variable
 		m.directStore(w.Value, m.A)
 	case op.SUBR: // declare subroutine
-		return fmt.Errorf("%d: %+v\n", m.PC-1, w)
+		return fmt.Errorf("%d: %s: %w\n", m.PC-1, w.Op, ErrInvalidOp)
 	case op.UNSTK: // unstack from backwards stack
-		return fmt.Errorf("%d: %+v\n", m.PC-1, w)
+		return fmt.Errorf("%d: %s: %w\n", m.PC-1, w.Op, ErrInvalidOp)
 	default:
 		return fmt.Errorf("assert(op != %q != %d): %w", w.Op, w.Op, ErrInvalidOp)
 	}

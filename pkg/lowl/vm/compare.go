@@ -17,11 +17,11 @@ const (
 
 func (m *VM) compare(r, v int) {
 	if r < v {
-		m.Cmp = IS_LT
+		m.Registers.Cmp = IS_LT
 	} else if r > v {
-		m.Cmp = IS_GR
+		m.Registers.Cmp = IS_GR
 	} else {
-		m.Cmp = IS_EQ
+		m.Registers.Cmp = IS_EQ
 	}
 }
 

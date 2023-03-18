@@ -19,6 +19,11 @@ func (m *VM) directStore(v, value int) {
 	m.Core[v].Value = value
 }
 
+// indexedLoad returns the contents of the address pointed to by B + n
+func (m *VM) indexedLoad(n int) int {
+	return m.Core[m.B+n].Value
+}
+
 // indirectLoad returns the contents of the address pointed to by V
 func (m *VM) indirectLoad(v int) int {
 	return m.Core[m.Core[v].Value].Value
