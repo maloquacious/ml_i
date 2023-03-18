@@ -9,342 +9,308 @@ import (
 	"errors"
 	"github.com/maloquacious/ml_i/pkg/lowl/op"
 	"github.com/maloquacious/ml_i/pkg/lowl/vm"
+	"io"
 	"strings"
 	"testing"
 )
 
-// TestVM_Run tests basic run and halt.
-func TestVM_Run(t *testing.T) {
-	opc := op.HALT
-	expectPC := 0
-	m := &vm.VM{}
-	if m.PC != expectPC || m.Core[0].Op != opc {
-		t.Fatalf("setw: want pc %d op HALT: got %d %q\n", expectPC, m.PC, m.Core[m.PC].Op)
+type input_t struct {
+	PC      int
+	A, B, C int
+	Text    string
+	V, V2   val_t
+}
+type expect_t struct {
+	PC      int
+	A, B, C int
+	Text    string
+	V, V2   val_t
+}
+
+type val_t struct {
+	address int
+	value   int
+}
+
+// TestVM tests running, stepping, and all the op codes in the machine.
+func TestVM(t *testing.T) {
+	var m *vm.VM
+	var opc op.Code
+	var input input_t
+	var expect expect_t
+	var out *bytes.Buffer
+
+	newvm := func() {
+		m = &vm.VM{PC: input.PC, A: input.A, B: input.B, C: input.C}
+		if input.V.address != 0 {
+			m.SetWord(input.V.address, vm.Word{Op: op.CON, Value: input.V.value})
+		}
+	}
+	step := func(stdout, stdmsg io.Writer) {
+		if err := m.Step(stdout, stdmsg); err != nil {
+			t.Errorf("%s: want nil: got %v\n", opc, err)
+		}
+	}
+	testA := func() {
+		if m.A != expect.A {
+			t.Errorf("%s: r.A: want %d: got %d\n", opc, expect.A, m.A)
+		}
+	}
+	testB := func() {
+		if m.B != expect.B {
+			t.Errorf("%s: r.B: want %d: got %d\n", opc, expect.B, m.B)
+		}
+	}
+	testC := func() {
+		if m.C != expect.C {
+			t.Errorf("%s: r.C: want %d: got %d\n", opc, expect.C, m.C)
+		}
+	}
+	testPC := func() {
+		if m.PC != expect.PC {
+			t.Errorf("%s: pc: want %d: got %d\n", opc, expect.PC, m.PC)
+		}
+	}
+	testV := func() {
+		if expect.V.address != 0 {
+			valOfV := m.Core[expect.V.address].Value
+			if valOfV != expect.V.value {
+				t.Errorf("%s: *v: want %d: got %d\n", opc, expect.V.value, valOfV)
+			}
+		}
+	}
+	test := func(stdout, stdmsg io.Writer) {
+		step(stdout, stdmsg)
+		testA()
+		testB()
+		testC()
+		testPC()
+		testV()
+	}
+
+	// halting test must pass before running further tests
+	opc = op.HALT
+	input = input_t{}
+	expect = expect_t{}
+	newvm()
+	if m.PC != expect.PC || m.Core[0].Op != opc {
+		t.Fatalf("setw: want pc %d op HALT: got %d %q\n", expect.PC, m.PC, m.Core[m.PC].Op)
 	}
 	if err := m.Run(nil, nil); err != nil {
 		if !errors.Is(err, vm.ErrHalted) {
 			t.Fatalf("run: want ErrHalt: got %v\n", err)
 		}
 	}
-	if m.PC != expectPC {
-		t.Errorf("pc: wants %d: got %d\n", expectPC, m.PC)
+	if m.PC != expect.PC {
+		t.Fatalf("pc: wants %d: got %d\n", expect.PC, m.PC)
 	}
-}
 
-// TestVM_DirectLoads tests all direct loads into registers.
-func TestVM_DirectLoads(t *testing.T) {
-	opc := op.LAL
-	input, expect := 3, 3
-	m := &vm.VM{}
-	m.SetWord(0, vm.Word{Op: opc, Value: input})
-	if err := m.Step(nil, nil); err != nil {
-		t.Errorf("%s: want nil: got %v\n", opc, err)
-	} else if m.A != expect {
-		t.Errorf("%s: r.A wants %d: got %d\n", opc, expect, m.A)
-	}
-}
-
-// TestVM_Math tests register math.
-func TestVM_Math(t *testing.T) {
-	opc := op.AAL
-	inputA, inputB, inputC, inputV := 3, 4, 5, 88
-	expectPC, expectA, expectB, expectC := 1, inputA+inputV, inputB, inputC
-	m := &vm.VM{A: inputA, B: inputB, C: inputC}
-	m.SetWord(0, vm.Word{Op: opc, Value: inputV})
-	if err := m.Step(nil, nil); err != nil {
-		t.Errorf("%s: want nil: got %v\n", opc, err)
-	}
-	if m.A != expectA {
-		t.Errorf("%s: r.A wants %d: got %d\n", opc, expectA, m.A)
-	}
-	if m.B != expectB {
-		t.Errorf("%s: r.B wants %d: got %d\n", opc, expectB, m.B)
-	}
-	if m.C != expectC {
-		t.Errorf("%s: r.C wants %d: got %d\n", opc, expectC, m.C)
-	}
-	if m.PC != expectPC {
-		t.Errorf("%s: pc wants %d: got %d\n", opc, expectPC, m.PC)
-	}
+	opc = op.AAL
+	input = input_t{A: 3, B: 4, C: 5, V: val_t{1, 88}}
+	expect = expect_t{PC: 1, A: input.A + input.V.value, B: input.B, C: input.C}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: input.V.value})
+	test(nil, nil)
 
 	opc = op.AAV
-	inputA, inputB, inputC, addrV, inputV := 3, 4, 5, 1, 88
-	expectPC, expectA, expectB, expectC, expectV := 1, inputA+inputV, inputB, inputC, inputV
-	m = &vm.VM{A: inputA, B: inputB, C: inputC}
-	m.SetWord(0, vm.Word{Op: opc, Value: addrV})
-	m.SetWord(addrV, vm.Word{Op: op.CON, Value: inputV})
-	if err := m.Step(nil, nil); err != nil {
-		t.Errorf("%s: want nil: got %v\n", opc, err)
-	}
-	if m.A != expectA {
-		t.Errorf("%s: r.A wants %d: got %d\n", opc, expectA, m.A)
-	}
-	if m.B != expectB {
-		t.Errorf("%s: r.B wants %d: got %d\n", opc, expectB, m.B)
-	}
-	if m.C != expectC {
-		t.Errorf("%s: r.C wants %d: got %d\n", opc, expectC, m.C)
-	}
-	if m.PC != expectPC {
-		t.Errorf("%s: pc wants %d: got %d\n", opc, expectPC, m.PC)
-	}
-	if valOfV := m.Core[addrV].Value; valOfV != expectV {
-		t.Errorf("%s: *v: want %d: got %d\n", opc, inputV, expectV)
-	}
+	input = input_t{A: 3, B: 4, C: 5, V: val_t{1, 88}}
+	expect = expect_t{PC: 1, A: input.A + input.V.value, B: input.B, C: input.C, V: input.V}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: input.V.address})
+	test(nil, nil)
 
 	opc = op.ABV
-	inputA, inputB, inputC, addrV, inputV = 3, 4, 5, 1, 88
-	expectPC, expectA, expectB, expectC, expectV = 1, inputA, inputB+inputV, inputC, inputV
-	m = &vm.VM{A: inputA, B: inputB, C: inputC}
-	m.SetWord(0, vm.Word{Op: opc, Value: addrV})
-	m.SetWord(addrV, vm.Word{Op: op.CON, Value: inputV})
-	if err := m.Step(nil, nil); err != nil {
-		t.Errorf("%s: want nil: got %v\n", opc, err)
-	}
-	if m.A != expectA {
-		t.Errorf("%s: r.A wants %d: got %d\n", opc, expectA, m.A)
-	}
-	if m.B != expectB {
-		t.Errorf("%s: r.B wants %d: got %d\n", opc, expectB, m.B)
-	}
-	if m.C != expectC {
-		t.Errorf("%s: r.C wants %d: got %d\n", opc, expectC, m.C)
-	}
-	if m.PC != expectPC {
-		t.Errorf("%s: pc wants %d: got %d\n", opc, expectPC, m.PC)
-	}
-	if valOfV := m.Core[addrV].Value; valOfV != expectV {
-		t.Errorf("%s: *v: want %d: got %d\n", opc, inputV, expectV)
-	}
+	input = input_t{A: 3, B: 4, C: 5, V: val_t{1, 88}}
+	expect = expect_t{PC: 1, A: input.A, B: input.B + input.V.value, C: input.C, V: val_t{1, input.V.value}}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: input.V.address})
+	test(nil, nil)
+
+	t.Errorf("%s: not tested\n", op.ALIGN)
 
 	opc = op.ANDL
-	inputA, inputB, inputC, inputV = 3, 4, 5, 11
-	expectPC, expectA, expectB, expectC = 1, inputA&inputV, inputB, inputC
-	m = &vm.VM{A: inputA, B: inputB, C: inputC}
-	m.SetWord(0, vm.Word{Op: opc, Value: inputV})
-	if err := m.Step(nil, nil); err != nil {
-		t.Errorf("%s: want nil: got %v\n", opc, err)
-	}
-	if m.A != expectA {
-		t.Errorf("%s: r.A wants %d: got %d\n", opc, expectA, m.A)
-	}
-	if m.B != expectB {
-		t.Errorf("%s: r.B wants %d: got %d\n", opc, expectB, m.B)
-	}
-	if m.C != expectC {
-		t.Errorf("%s: r.C wants %d: got %d\n", opc, expectC, m.C)
-	}
-	if m.PC != expectPC {
-		t.Errorf("%s: pc wants %d: got %d\n", opc, expectPC, m.PC)
-	}
+	input = input_t{A: 3, B: 12, C: 49, V: val_t{1, 11}}
+	expect = expect_t{PC: 1, A: input.A & input.V.value, B: input.B, C: input.C, V: input.V}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: input.V.value})
+	test(nil, nil)
 
 	opc = op.ANDV
-	inputA, inputB, inputC, addrV, inputV = 3, 4, 5, 1, 11
-	expectPC, expectA, expectB, expectC, expectV = 1, inputA&inputV, inputB, inputC, inputV
-	m = &vm.VM{A: inputA, B: inputB, C: inputC}
-	m.SetWord(0, vm.Word{Op: opc, Value: addrV})
-	m.SetWord(addrV, vm.Word{Op: op.CON, Value: inputV})
-	if err := m.Step(nil, nil); err != nil {
-		t.Errorf("%s: want nil: got %v\n", opc, err)
-	}
-	if m.A != expectA {
-		t.Errorf("%s: r.A wants %d: got %d\n", opc, expectA, m.A)
-	}
-	if m.B != expectB {
-		t.Errorf("%s: r.B wants %d: got %d\n", opc, expectB, m.B)
-	}
-	if m.C != expectC {
-		t.Errorf("%s: r.C wants %d: got %d\n", opc, expectC, m.C)
-	}
-	if m.PC != expectPC {
-		t.Errorf("%s: pc wants %d: got %d\n", opc, expectPC, m.PC)
-	}
-	if valOfV := m.Core[addrV].Value; valOfV != expectV {
-		t.Errorf("%s: *v: want %d: got %d\n", opc, inputV, expectV)
-	}
+	input = input_t{A: 3, B: 12, C: 49, V: val_t{1, 11}}
+	expect = expect_t{PC: 1, A: input.A & input.V.value, B: input.B, C: input.C, V: input.V}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: input.V.address})
+	test(nil, nil)
+
+	t.Errorf("%s: not tested\n", op.BMOVE)
+	t.Errorf("%s: not tested\n", op.BSTK)
 
 	opc = op.BUMP
-	inputA, inputB, inputC, addrV, inputV = 3, 4, 5, 1, 11
-	expectPC, expectA, expectB, expectC, expectV = 1, inputA, inputB, inputC, inputV+inputV
-	m = &vm.VM{A: inputA, B: inputB, C: inputC}
-	m.SetWord(0, vm.Word{Op: opc, Value: addrV, ValueTwo: inputV})
-	m.SetWord(addrV, vm.Word{Op: op.CON, Value: inputV})
-	if err := m.Step(nil, nil); err != nil {
-		t.Errorf("%s: want nil: got %v\n", opc, err)
-	}
-	if m.A != expectA {
-		t.Errorf("%s: r.A wants %d: got %d\n", opc, expectA, m.A)
-	}
-	if m.B != expectB {
-		t.Errorf("%s: r.B wants %d: got %d\n", opc, expectB, m.B)
-	}
-	if m.C != expectC {
-		t.Errorf("%s: r.C wants %d: got %d\n", opc, expectC, m.C)
-	}
-	if m.PC != expectPC {
-		t.Errorf("%s: pc wants %d: got %d\n", opc, expectPC, m.PC)
-	}
-	if valOfV := m.Core[addrV].Value; valOfV != expectV {
-		t.Errorf("%s: *v: want %d: got %d\n", opc, inputV, expectV)
-	}
+	input = input_t{A: 3, B: 12, C: 49, V: val_t{1, 11}, V2: val_t{value: 2}}
+	expect = expect_t{PC: 1, A: input.A, B: input.B, C: input.C, V: val_t{input.V.address, input.V.value + input.V2.value}}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: input.V.address, ValueTwo: input.V2.value})
+	test(nil, nil)
+
+	t.Errorf("%s: not tested\n", op.CAI)
+	t.Errorf("%s: not tested\n", op.CAL)
+	t.Errorf("%s: not tested\n", op.CAV)
+	t.Errorf("%s: not tested\n", op.CCI)
+	t.Errorf("%s: not tested\n", op.CCN)
+	t.Errorf("%s: not tested\n", op.CFSTK)
 
 	opc = op.CLEAR
-	inputA, inputB, inputC, addrV, inputV = 3, 4, 5, 1, 11
-	expectPC, expectA, expectB, expectC, expectV = 1, inputA, inputB, inputC, 0
-	m = &vm.VM{A: inputA, B: inputB, C: inputC}
-	m.SetWord(0, vm.Word{Op: opc, Value: addrV})
-	m.SetWord(addrV, vm.Word{Op: op.CON, Value: inputV})
-	if err := m.Step(nil, nil); err != nil {
-		t.Errorf("%s: want nil: got %v\n", opc, err)
-	}
-	if m.A != expectA {
-		t.Errorf("%s: r.A wants %d: got %d\n", opc, expectA, m.A)
-	}
-	if m.B != expectB {
-		t.Errorf("%s: r.B wants %d: got %d\n", opc, expectB, m.B)
-	}
-	if m.C != expectC {
-		t.Errorf("%s: r.C wants %d: got %d\n", opc, expectC, m.C)
-	}
-	if m.PC != expectPC {
-		t.Errorf("%s: pc wants %d: got %d\n", opc, expectPC, m.PC)
-	}
-	if valOfV := m.Core[addrV].Value; valOfV != expectV {
-		t.Errorf("%s: *v: want %d: got %d\n", opc, inputV, expectV)
-	}
+	input = input_t{A: 3, B: 12, C: 49, V: val_t{1, 11}}
+	expect = expect_t{PC: 1, A: input.A & input.V.value, B: input.B, C: input.C, V: val_t{input.V.address, input.V.value}}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: input.V.value})
+	test(nil, nil)
 
-	opc = op.MULTL
-	inputA, inputB, inputC, inputV = 5, 7, -4, 3
-	expectPC, expectA, expectB, expectC = 1, inputA*inputV, inputB, inputC
-	m = &vm.VM{A: inputA, B: inputB, C: inputC}
-	m.SetWord(0, vm.Word{Op: opc, Value: inputV})
-	if err := m.Step(nil, nil); err != nil {
-		t.Errorf("%s: want nil: got %v\n", opc, err)
-	}
-	if m.A != expectA {
-		t.Errorf("%s: r.A wants %d: got %d\n", opc, expectA, m.A)
-	}
-	if m.B != expectB {
-		t.Errorf("%s: r.B wants %d: got %d\n", opc, expectB, m.B)
-	}
-	if m.C != expectC {
-		t.Errorf("%s: r.C wants %d: got %d\n", opc, expectC, m.C)
-	}
-	if m.PC != expectPC {
-		t.Errorf("%s: pc wants %d: got %d\n", opc, expectPC, m.PC)
-	}
+	t.Errorf("%s: not tested\n", op.CON)
+	t.Errorf("%s: not tested\n", op.CSS)
+	t.Errorf("%s: not tested\n", op.DCL)
+	t.Errorf("%s: not tested\n", op.EQU)
+	t.Errorf("%s: not tested\n", op.EXIT)
+	t.Errorf("%s: not tested\n", op.FMOVE)
+	t.Errorf("%s: not tested\n", op.FSTK)
+	t.Errorf("%s: not tested\n", op.GO)
+	t.Errorf("%s: not tested\n", op.GOADD)
+	t.Errorf("%s: not tested\n", op.GOEQ)
+	t.Errorf("%s: not tested\n", op.GOGE)
+	t.Errorf("%s: not tested\n", op.GOGR)
+	t.Errorf("%s: not tested\n", op.GOLE)
+	t.Errorf("%s: not tested\n", op.GOND)
+	t.Errorf("%s: not tested\n", op.GONE)
+	t.Errorf("%s: not tested\n", op.GOPC)
+	t.Errorf("%s: not tested\n", op.GOSUB)
+	t.Errorf("%s: not tested\n", op.GOTBL)
 
-	opc = op.SAL
-	inputA, inputB, inputC, inputV = 52, 17, 41, -12
-	expectPC, expectA, expectB, expectC = 1, inputA-inputV, inputB, inputC
-	m = &vm.VM{A: inputA, B: inputB, C: inputC}
-	m.SetWord(0, vm.Word{Op: opc, Value: inputV})
-	if err := m.Step(nil, nil); err != nil {
-		t.Errorf("%s: want nil: got %v\n", opc, err)
-	}
-	if m.A != expectA {
-		t.Errorf("%s: r.A wants %d: got %d\n", opc, expectA, m.A)
-	}
-	if m.B != expectB {
-		t.Errorf("%s: r.B wants %d: got %d\n", opc, expectB, m.B)
-	}
-	if m.C != expectC {
-		t.Errorf("%s: r.C wants %d: got %d\n", opc, expectC, m.C)
-	}
-	if m.PC != expectPC {
-		t.Errorf("%s: pc wants %d: got %d\n", opc, expectPC, m.PC)
-	}
-
-	opc = op.SBL
-	inputA, inputB, inputC, inputV = 9, 5, 13, 3
-	expectPC, expectA, expectB, expectC = 1, inputA, inputB-inputV, inputC
-	m = &vm.VM{A: inputA, B: inputB, C: inputC}
-	m.SetWord(0, vm.Word{Op: opc, Value: inputV})
-	if err := m.Step(nil, nil); err != nil {
-		t.Errorf("%s: want nil: got %v\n", opc, err)
-	}
-	if m.A != expectA {
-		t.Errorf("%s: r.A wants %d: got %d\n", opc, expectA, m.A)
-	}
-	if m.B != expectB {
-		t.Errorf("%s: r.B wants %d: got %d\n", opc, expectB, m.B)
-	}
-	if m.C != expectC {
-		t.Errorf("%s: r.C wants %d: got %d\n", opc, expectC, m.C)
-	}
-	if m.PC != expectPC {
-		t.Errorf("%s: pc wants %d: got %d\n", opc, expectPC, m.PC)
-	}
-}
-
-// TestVM_Misc tests things that don't fall into other categories.
-func TestVM_Misc(t *testing.T) {
-	opc := op.NOOP
-	inputA, inputB, inputC := -42, 88, 32
-	expectPC, expectA, expectB, expectC := 1, inputA, inputB, inputC
-	m := &vm.VM{A: inputA, B: inputB, C: inputC}
+	opc = op.HALT
+	input = input_t{A: 3, B: 4, C: 5}
+	expect = expect_t{PC: 0, A: input.A, B: input.B, C: input.C}
+	newvm()
 	m.SetWord(0, vm.Word{Op: opc})
-	if err := m.Step(nil, nil); err != nil {
-		t.Errorf("%s: want nil: got %v\n", opc, err)
+	if err := m.Step(nil, nil); err == nil {
+		t.Errorf("%s: want halted: got nil\n", opc)
+	} else if !errors.Is(err, vm.ErrHalted) {
+		t.Errorf("%s: want halted: got %v\n", opc, err)
 	}
-	if m.A != expectA {
-		t.Errorf("%s: r.A wants %d: got %d\n", opc, expectA, m.A)
+	if !m.Registers.Halted {
+		t.Errorf("%s: want halted: got running\n", opc)
 	}
-	if m.B != expectB {
-		t.Errorf("%s: r.B wants %d: got %d\n", opc, expectB, m.B)
-	}
-	if m.C != expectC {
-		t.Errorf("%s: r.C wants %d: got %d\n", opc, expectC, m.C)
-	}
-	if m.PC != expectPC {
-		t.Errorf("%s: pc wants %d: got %d\n", opc, expectPC, m.PC)
-	}
-}
+	testA()
+	testB()
+	testC()
+	testPC()
+	testV()
 
-// TestVM_Streams tests stream instructions.
-func TestVM_Streams(t *testing.T) {
-	opc := op.MESS
-	input := "$ABCDEFGHIJKLMNOPQRSTUVWXYZ$0123456789$.,;:()*/-+=\t \"$"
-	expect := strings.ReplaceAll(input, "$", "\n")
-	m, out := &vm.VM{}, &bytes.Buffer{}
-	m.SetWord(0, vm.Word{Op: opc, Text: input})
-	if err := m.Step(out, nil); err != nil {
-		t.Errorf("%s: want nil: got %v\n", opc, err)
-	}
-	if b := out.Bytes(); len(b) != len(expect) {
-		t.Errorf("%s: out.len wants %d: got %d\n", opc, len(expect), len(b))
-	} else if s := string(b); s != expect {
-		t.Errorf("%s: out wants %q: got %q\n", opc, expect, s)
-	}
-}
+	t.Errorf("%s: not tested\n", op.IDENT)
+	t.Errorf("%s: not tested\n", op.LAA)
+	t.Errorf("%s: not tested\n", op.LAI)
 
-// TestVM_MDxxx tests the custom MD instructions.
-func TestVM_MDxxx(t *testing.T) {
-	opc := op.MDERCH
-	inputC := 'A'
-	expect := string(inputC)
-	m, out := &vm.VM{C: int(inputC)}, &bytes.Buffer{}
+	opc = op.LAL
+	input = input_t{A: 3, B: 4, C: 5, V: val_t{0, 88}}
+	expect = expect_t{PC: 1, A: input.V.value, B: input.B, C: input.C, V: input.V}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: input.V.value})
+	test(nil, nil)
+
+	t.Errorf("%s: not tested\n", op.LAM)
+	t.Errorf("%s: not tested\n", op.LAV)
+	t.Errorf("%s: not tested\n", op.LBV)
+	t.Errorf("%s: not tested\n", op.LCI)
+	t.Errorf("%s: not tested\n", op.LCM)
+	t.Errorf("%s: not tested\n", op.LCN)
+
+	opc = op.MDERCH
+	input = input_t{A: 3, B: 4, C: 'A'}
+	expect = expect_t{PC: 1, A: input.A, B: input.B, C: input.C, Text: "A"}
+	out = &bytes.Buffer{}
+	newvm()
 	m.SetWord(0, vm.Word{Op: opc})
-	if err := m.Step(out, nil); err != nil {
-		t.Errorf("%s: want nil: got %v\n", opc, err)
-	} else {
-		if b := out.Bytes(); len(b) != len(expect) {
-			t.Errorf("%s: out.len wants %d: got %d\n", opc, len(expect), len(b))
-		} else if s := string(b); s != expect {
-			t.Errorf("%s: out wants %q: got %q\n", opc, expect, s)
-		}
+	test(out, nil)
+	if b := out.Bytes(); len(b) != len(expect.Text) {
+		t.Errorf("%s: out.len: want %d: got %d\n", opc, len(expect.Text), len(b))
+	} else if s := string(b); s != expect.Text {
+		t.Errorf("%s: out.text: want %q: got %q\n", opc, expect, s)
 	}
+	out = nil
+
+	t.Errorf("%s: not tested\n", op.MDLABEL)
 
 	opc = op.MDQUIT
-	m = &vm.VM{}
+	input = input_t{A: 3, B: 4, C: 5}
+	expect = expect_t{PC: 0, A: input.A, B: input.B, C: input.C}
+	newvm()
 	m.SetWord(0, vm.Word{Op: opc})
-	if expect := 0; m.PC != expect || m.Core[0].Op != opc {
-		t.Fatalf("setw: want pc %d op %s: got %d %q\n", expect, opc, m.PC, m.Core[m.PC].Op)
+	if err := m.Step(nil, nil); err == nil {
+		t.Errorf("%s: want quit: got nil\n", opc)
+	} else if !errors.Is(err, vm.ErrQuit) {
+		t.Errorf("%s: want quit: got %v\n", opc, err)
 	}
-	if err := m.Run(nil, nil); err != nil {
-		t.Fatalf("run: want ErrQuit: got %v\n", err)
+	if !m.Registers.Halted {
+		t.Errorf("%s: want halted: got running\n", opc)
 	}
-	if m.PC != 0 {
-		t.Errorf("pc: want 0: got %d\n", m.PC)
+	testA()
+	testB()
+	testC()
+	testPC()
+	testV()
+
+	opc = op.MESS
+	input = input_t{A: 3, B: 4, C: 5, Text: "$ABCDEFGHIJKLMNOPQRSTUVWXYZ$0123456789$.,;:()*/-+=\t \"$"}
+	expect = expect_t{PC: 1, A: input.A, B: input.B, C: input.C, Text: strings.ReplaceAll(input.Text, "$", "\n")}
+	out = &bytes.Buffer{}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Text: input.Text})
+	test(out, nil)
+	if b := out.Bytes(); len(b) != len(expect.Text) {
+		t.Errorf("%s: out.len: want %d: got %d\n", opc, len(expect.Text), len(b))
+	} else if s := string(b); s != expect.Text {
+		t.Errorf("%s: out.text: want %q: got %q\n", opc, expect, s)
 	}
+	out = nil
+
+	opc = op.MULTL
+	input = input_t{A: 3, B: 4, C: 5, V: val_t{1, 88}}
+	expect = expect_t{PC: 1, A: input.A * input.V.value, B: input.B, C: input.C}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: input.V.value})
+	test(nil, nil)
+
+	t.Errorf("%s: not tested\n", op.NB)
+	t.Errorf("%s: not tested\n", op.NCH)
+
+	opc = op.NOOP
+	input = input_t{A: 3, B: 4, C: 5}
+	expect = expect_t{PC: 1, A: input.A, B: input.B, C: input.C}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: input.V.value})
+	test(nil, nil)
+
+	t.Errorf("%s: not tested\n", op.PRGEN)
+	t.Errorf("%s: not tested\n", op.PRGST)
+
+	opc = op.SAL
+	input = input_t{A: 3, B: 4, C: 5, V: val_t{1, 88}}
+	expect = expect_t{PC: 1, A: input.A - input.V.value, B: input.B, C: input.C}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: input.V.value})
+	test(nil, nil)
+
+	t.Errorf("%s: not tested\n", op.SAV)
+
+	opc = op.SBL
+	input = input_t{A: 3, B: 4, C: 5, V: val_t{1, 88}}
+	expect = expect_t{PC: 1, A: input.A, B: input.B - input.V.value, C: input.C}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: input.V.value})
+	test(nil, nil)
+
+	t.Errorf("%s: not tested\n", op.SBV)
+	t.Errorf("%s: not tested\n", op.STI)
+	t.Errorf("%s: not tested\n", op.STR)
+	t.Errorf("%s: not tested\n", op.STV)
+	t.Errorf("%s: not tested\n", op.SUBR)
+	t.Errorf("%s: not tested\n", op.UNSTK)
 }
