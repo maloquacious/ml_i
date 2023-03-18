@@ -26,6 +26,7 @@ type VM struct {
 		LFPT        int // points to the variable holding the last location in use on the backwards stack
 		PARNM       int // points to the variable holding the subroutine parameter
 		SRCPT       int // points to the variable holding the source field pointer (stack moves)
+		Halted      bool
 		JumpValue   int // jump value for GOTBL
 		Start, Last int // starting, last address
 	}
@@ -49,21 +50,4 @@ type Word struct {
 		Parameters   string
 		Continuation bool
 	}
-}
-
-func New() *VM {
-	// when we start running the machine, the PC will be set to the first instruction in the program.
-	m := &VM{}
-
-	// first instruction should be a halt.
-	m.Core[m.PC], m.PC = Word{Op: op.HALT}, m.PC+1
-
-	// initialized the reserved addresses
-	m.Registers.DSTPT, m.PC = m.PC, m.PC+1
-	m.Registers.FFPT, m.PC = m.PC, m.PC+1
-	m.Registers.LFPT, m.PC = m.PC, m.PC+1
-	m.Registers.PARNM, m.PC = m.PC, m.PC+1
-	m.Registers.SRCPT, m.PC = m.PC, m.PC+1
-
-	return m
 }

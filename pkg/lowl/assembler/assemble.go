@@ -13,7 +13,6 @@ import (
 	"github.com/maloquacious/ml_i/pkg/lowl/vm"
 	"os"
 	"sort"
-	"strings"
 )
 
 func Assemble(nodes ast.Nodes) (*vm.VM, error) {
@@ -328,7 +327,7 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 			}
 			switch text := node.Parameters[0]; text.Kind {
 			case ast.QuotedText:
-				word.Text = strings.ReplaceAll(text.Text, "$", "\n")
+				word.Text = text.Text
 			default:
 				return nil, fmt.Errorf("%d: %s: %s: not allowed", node.Line, node.Op, text.Kind)
 			}
