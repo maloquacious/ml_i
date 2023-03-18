@@ -34,7 +34,7 @@ func TestFromInfix(t *testing.T) {
 			infix:   []string{"A", "*", "(", "B", "*", "C", "+", "D", "*", "E", ")", "+", "F"},
 			postfix: []string{"A", "B", "C", "*", "D", "E", "*", "+", "*", "F", "+"}},
 	} {
-		got := postfix.FromInfix(tc.infix...)
+		got := postfix.FromInfix(tc.infix)
 		if fmt.Sprintf("%v", got) != fmt.Sprintf("%v", tc.postfix) {
 			t.Errorf("%d: want %v: got %v\n", tc.id, tc.postfix, got)
 		}
