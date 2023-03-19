@@ -52,11 +52,15 @@ func Assemble(nodes ast.Nodes) (*vm.VM, error) {
 		case op.ALIGN:
 			// ALIGN emits no code
 		case op.BMOVE, op.FMOVE:
-			if _, ok := symtab.Lookup("DSTPT"); !ok {
-				return nil, fmt.Errorf("%d: %d: internal error: DSTPT undefined", node.Line, node.Col)
-			}
-			if _, ok := symtab.Lookup("SRCPT"); !ok {
+			if sym, ok := symtab.Lookup("SRCPT"); !ok {
 				return nil, fmt.Errorf("%d: %d: internal error: SRCPT undefined", node.Line, node.Col)
+			} else {
+				word.Value = sym.address
+			}
+			if sym, ok := symtab.Lookup("DSTPT"); !ok {
+				return nil, fmt.Errorf("%d: %d: internal error: DSTPT undefined", node.Line, node.Col)
+			} else {
+				word.ValueTwo = sym.address
 			}
 			machine.Core[machine.PC], machine.PC = word, machine.PC+1
 		case op.BSTK, op.CFSTK, op.FSTK:

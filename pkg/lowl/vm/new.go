@@ -10,6 +10,8 @@ import "github.com/maloquacious/ml_i/pkg/lowl/op"
 func New() *VM {
 	// when we start running the machine, the PC will be set to the first instruction in the program.
 	m := &VM{PC: 0}
+	m.Registers.LCH = 1
+	m.Registers.LNM = 1
 
 	// first instruction should be a halt.
 	m.Core[m.PC], m.PC = Word{Op: op.HALT}, m.PC+1

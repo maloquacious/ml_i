@@ -42,23 +42,60 @@ func (m *VM) Step(stdout, stderr io.Writer) error {
 		// SRCPT points at the start of the source field.
 		// DSTPT points to the start of the destination field.
 		// Register A contains the length of the field (number of words to move)
-		srcpt, dstpt := m.indirectLoad(m.Registers.SRCPT), m.indirectLoad(m.Registers.DSTPT)
-		for a := m.A - 1; a >= 0; a-- {
-			m.Core[dstpt+a].Value = m.Core[srcpt+a].Value
+		src, dst, length := m.directLoad(w.Value), m.directLoad(w.ValueTwo), m.A
+		tmp := make([]Word, length, length)
+		for offset := 0; offset < length; offset++ {
+			tmp[offset] = m.Core[src+offset]
 		}
+		for offset := 0; offset < length; offset++ {
+			m.Core[dst+offset] = tmp[offset]
+		}
+
 	case op.BSTK: // stack A on backwards stack
-		ffpt, lfpt := m.directLoad(m.Registers.FFPT), m.directLoad(m.Registers.LFPT)
-		lfpt = lfpt - 1     // decrement before pushing
-		if ffpt+1 >= lfpt { // ERLSO
-			return fmt.Errorf("%d: FS: %w", m.PC-1, ErrStackUnderflow)
+		// preserve A
+		a := m.A
+
+		// LAV   LFPT     // load A with value of LFPT
+		variableAddress := m.Registers.LFPT
+		variableValue := m.directLoad(variableAddress)
+		m.A = variableValue
+
+		// SAL  OF(LNM)  // subtract LNM from register A
+		literalValue := m.Registers.LNM
+		m.A = m.A - literalValue
+
+		// STV  LFPT     // store register A in LFPT
+		variableAddress = m.Registers.LFPT
+		variableValue = m.A
+		m.directStore(variableAddress, variableValue)
+
+		// restore A
+		m.A = a
+
+		// STI   LFPT     // store A in address pointed at by LFPT
+		valueToStore := m.A
+		variableAddress = m.Registers.LFPT
+		m.indirectStore(variableAddress, valueToStore)
+
+		// LAV   FFPT     // load A with value of FFPT
+		variableAddress = m.Registers.FFPT
+		variableValue = m.directLoad(variableAddress)
+		m.A = variableValue
+
+		// CAV   LFPT     // compare A with the value of LFPT
+		variableAddress = m.Registers.LFPT
+		variableValue = m.directLoad(variableAddress)
+		m.compare(m.A, variableValue)
+
+		// GOGE  ERLSO    // if EQ or GT, error
+		if m.Registers.Cmp == IS_EQ || m.Registers.Cmp == IS_GR { // ERLSO
+			return fmt.Errorf("%d: BS: %w", m.PC-1, ErrStackOverflow)
 		}
-		m.Stack[lfpt] = m.A
-		m.directStore(m.Registers.LFPT, lfpt)
 	case op.BUMP: // increase a variable by a literal value
 		literalValue := w.ValueTwo
 		variableAddress := w.Value
 		variableValue := m.directLoad(variableAddress)
-		m.directStore(w.Value, literalValue+variableValue)
+		m.directStore(variableAddress, literalValue+variableValue)
 	case op.CAI: // compare contents of address pointed to by V to register A
 		variableAddress := w.Value
 		indirectValue := m.indirectLoad(variableAddress)
@@ -80,12 +117,35 @@ func (m *VM) Step(stdout, stderr io.Writer) error {
 		literalValue := w.Value
 		m.compare(m.C, literalValue)
 	case op.CFSTK: // stack C on forwards stack
-		ffpt, lfpt := m.directLoad(m.Registers.FFPT), m.directLoad(m.Registers.LFPT)
-		if ffpt+1 >= lfpt { // ERLSO
+		// CSTK is implemented as FSTK except C is stored and FFPT is incremented by OF(LCH)
+		// STI   FFPT     // store A in address pointed at by FFPT
+		valueToStore := m.C
+		variableAddress := m.Registers.FFPT
+		m.indirectStore(variableAddress, valueToStore)
+
+		// LAV   FFPT     // load A with value of FFPT
+		variableAddress = m.Registers.FFPT
+		variableValue := m.directLoad(variableAddress)
+		m.A = variableValue
+
+		// AAL   OF(LCH)  // add LCH to register A
+		literalValue := m.Registers.LNM
+		m.A = m.A + literalValue
+
+		// STV   FFPT     // store register A in FFPT
+		variableAddress = m.Registers.FFPT
+		variableValue = m.A
+		m.directStore(variableAddress, variableValue)
+
+		// CAV   LFPT     // compare A with the value of LFPT
+		variableAddress = m.Registers.LFPT
+		variableValue = m.directLoad(variableAddress)
+		m.compare(m.A, variableValue)
+
+		// GOGE  ERLSO    // if EQ or GT, error
+		if m.Registers.Cmp == IS_EQ || m.Registers.Cmp == IS_GR { // ERLSO
 			return fmt.Errorf("%d: FS: %w", m.PC-1, ErrStackOverflow)
 		}
-		m.Stack[ffpt], ffpt = m.C, ffpt+1
-		m.directStore(m.Registers.FFPT, ffpt)
 	case op.CLEAR: // set variable to zero
 		variableAddress := w.Value
 		m.directStore(variableAddress, 0)
@@ -100,17 +160,43 @@ func (m *VM) Step(stdout, stderr io.Writer) error {
 		// SRCPT points at the start of the source field.
 		// DSTPT points to the start of the destination field.
 		// Register A contains the length of the field (number of words to move)
-		srcpt, dstpt := m.indirectLoad(m.Registers.SRCPT), m.indirectLoad(m.Registers.DSTPT)
-		for a := 0; a < m.A; a++ {
-			m.Core[dstpt+a].Value = m.Core[srcpt+a].Value
+		src, dst, length := m.directLoad(w.Value), m.directLoad(w.ValueTwo), m.A
+		tmp := make([]Word, length, length)
+		for offset := 0; offset < length; offset++ {
+			tmp[offset] = m.Core[src+offset]
+		}
+		for offset := 0; offset < length; offset++ {
+			m.Core[dst+offset] = tmp[offset]
 		}
 	case op.FSTK: // stack A on forwards stack
-		ffpt, lfpt := m.directLoad(m.Registers.FFPT), m.directLoad(m.Registers.LFPT)
-		if ffpt+1 >= lfpt { // ERLSO
+		// STI   FFPT     // store A in address pointed at by FFPT
+		valueToStore := m.A
+		variableAddress := m.Registers.FFPT
+		m.indirectStore(variableAddress, valueToStore)
+
+		// LAV   FFPT     // load A with value of FFPT
+		variableAddress = m.Registers.FFPT
+		variableValue := m.directLoad(variableAddress)
+		m.A = variableValue
+
+		// AAL   OF(LNM)  // add LNM to register A
+		literalValue := m.Registers.LNM
+		m.A = m.A + literalValue
+
+		// STV   FFPT     // store register A in FFPT
+		variableAddress = m.Registers.FFPT
+		variableValue = m.A
+		m.directStore(variableAddress, variableValue)
+
+		// CAV   LFPT     // compare A with the value of LFPT
+		variableAddress = m.Registers.LFPT
+		variableValue = m.directLoad(variableAddress)
+		m.compare(m.A, variableValue)
+
+		// GOGE  ERLSO    // if EQ or GT, error
+		if m.Registers.Cmp == IS_EQ || m.Registers.Cmp == IS_GR { // ERLSO
 			return fmt.Errorf("%d: FS: %w", m.PC-1, ErrStackOverflow)
 		}
-		m.Stack[ffpt], ffpt = m.A, ffpt+1
-		m.directStore(m.Registers.FFPT, ffpt)
 	case op.GO: // unconditional branch
 		m.PC = w.Value
 	case op.GOADD: // multi-way branch
@@ -231,15 +317,31 @@ func (m *VM) Step(stdout, stderr io.Writer) error {
 		variableValue := m.directLoad(variableAddress)
 		m.B = m.B - variableValue
 	case op.STI: // store register A in address pointed at by variable V
+		valueToStore := m.A
 		variableAddress := w.Value
-		variableValue := m.A
-		m.indirectStore(variableAddress, variableValue)
+		m.indirectStore(variableAddress, valueToStore)
 	case op.STV: // store register A in variable
 		variableAddress := w.Value
 		variableValue := m.A
 		m.directStore(variableAddress, variableValue)
 	case op.UNSTK: // unstack from backwards stack
-		return fmt.Errorf("%d: %s: %w\n", m.PC-1, w.Op, ErrNotImplemented)
+		parmVariableAddress := w.Value
+
+		// LAI  LFPT         // load A with contents of the address pointed to by variable V
+		variableAddress := m.Registers.LFPT
+		indirectValue := m.indirectLoad(variableAddress)
+		m.A = indirectValue
+
+		// STV  V             // store register A in variable
+		variableAddress = parmVariableAddress
+		variableValue := m.A
+		m.directStore(variableAddress, variableValue)
+
+		// BUMP LFPT,OF(LNM)  // increase a variable by a literal value
+		literalValue := m.Registers.LNM
+		variableAddress = m.Registers.LFPT
+		variableValue = m.directLoad(variableAddress)
+		m.directStore(variableAddress, literalValue+variableValue)
 	default:
 		return fmt.Errorf("assert(op != %q != %d): %w", w.Op, w.Op, ErrInvalidOp)
 	}

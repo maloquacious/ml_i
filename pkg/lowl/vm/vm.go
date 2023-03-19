@@ -22,7 +22,9 @@ type VM struct {
 		Cmp         CMPRSLT
 		DSTPT       int // points to the variable holding the destination field pointer (stack moves)
 		FFPT        int // points to the variable holding the first free location of the forwards stack
+		LCH         int // length of a character in this machine
 		LFPT        int // points to the variable holding the last location in use on the backwards stack
+		LNM         int // length of a number in this machine
 		PARNM       int // points to the variable holding the subroutine parameter
 		SRCPT       int // points to the variable holding the source field pointer (stack moves)
 		Halted      bool
