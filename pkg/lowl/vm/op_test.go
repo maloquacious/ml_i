@@ -7,6 +7,7 @@ package vm_test
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"github.com/maloquacious/ml_i/pkg/lowl/op"
 	"github.com/maloquacious/ml_i/pkg/lowl/vm"
 	"io"
@@ -18,6 +19,7 @@ type input_t struct {
 	PC      int
 	A, B, C int
 	Cmp     vm.CMPRSLT
+	RS      []int
 	Text    string
 	V, V2   val_t
 }
@@ -25,6 +27,7 @@ type expect_t struct {
 	PC      int
 	A, B, C int
 	Cmp     vm.CMPRSLT
+	RS      []int
 	Text    string
 	V, V2   val_t
 }
@@ -45,6 +48,7 @@ func TestVM(t *testing.T) {
 	newvm := func() {
 		m = &vm.VM{PC: input.PC, A: input.A, B: input.B, C: input.C}
 		m.Registers.Cmp = input.Cmp
+		m.RS = append(m.RS, input.RS...)
 		if input.V.address != 0 {
 			m.SetWord(input.V.address, vm.Word{Op: op.CON, Value: input.V.value})
 		}
@@ -82,6 +86,13 @@ func TestVM(t *testing.T) {
 			t.Errorf("%s: pc: want %d: got %d\n", opc, expect.PC, m.PC)
 		}
 	}
+	testRS := func() {
+		want := fmt.Sprintf("%v", expect.RS)
+		got := fmt.Sprintf("%v", m.RS)
+		if got != want {
+			t.Errorf("%s: rs: want %s: got %s\n", opc, want, got)
+		}
+	}
 	testV := func() {
 		if expect.V.address != 0 {
 			valOfV := m.Core[expect.V.address].Value
@@ -96,6 +107,7 @@ func TestVM(t *testing.T) {
 		testB()
 		testC()
 		testPC()
+		testRS()
 		testCmpResult()
 		testV()
 	}
@@ -294,7 +306,20 @@ func TestVM(t *testing.T) {
 	}
 
 	opc = op.CSS
-	t.Errorf("%s: not tested\n", opc)
+	input = input_t{}
+	expect = expect_t{PC: 1}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc})
+	if err := m.Step(nil, nil); err == nil {
+		t.Errorf("%s: want underflow: got nil\n", opc)
+	} else if !errors.Is(err, vm.ErrStackUnderflow) {
+		t.Errorf("%s: want underflow: got %v\n", opc, err)
+	}
+	input = input_t{RS: []int{99}}
+	expect = expect_t{PC: 1}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc})
+	test(nil, nil)
 
 	opc = op.DCL
 	input = input_t{}
@@ -665,6 +690,28 @@ func TestVM(t *testing.T) {
 	m.SetWord(0, vm.Word{Op: opc, Value: input.V.value})
 	test(nil, nil)
 
+	opc = op.PRGEN
+	input = input_t{}
+	expect = expect_t{PC: 1}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc})
+	if err := m.Step(nil, nil); err == nil {
+		t.Errorf("%s: want invalid op: got nil\n", opc)
+	} else if !errors.Is(err, vm.ErrInvalidOp) {
+		t.Errorf("%s: want invalid op: got %v\n", opc, err)
+	}
+
+	opc = op.PRGST
+	input = input_t{}
+	expect = expect_t{PC: 1}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc})
+	if err := m.Step(nil, nil); err == nil {
+		t.Errorf("%s: want invalid op: got nil\n", opc)
+	} else if !errors.Is(err, vm.ErrInvalidOp) {
+		t.Errorf("%s: want invalid op: got %v\n", opc, err)
+	}
+
 	opc = op.SAL
 	input = input_t{A: 3, B: 4, C: 5, V: val_t{1, 88}}
 	expect = expect_t{PC: 1, A: input.A - input.V.value, B: input.B, C: input.C}
@@ -717,6 +764,17 @@ func TestVM(t *testing.T) {
 	newvm()
 	m.SetWord(0, vm.Word{Op: opc, Value: input.V.address})
 	test(nil, nil)
+
+	opc = op.SUBR
+	input = input_t{}
+	expect = expect_t{PC: 1}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc})
+	if err := m.Step(nil, nil); err == nil {
+		t.Errorf("%s: want invalid op: got nil\n", opc)
+	} else if !errors.Is(err, vm.ErrInvalidOp) {
+		t.Errorf("%s: want invalid op: got %v\n", opc, err)
+	}
 
 	opc = op.UNSTK
 	t.Errorf("%s: not tested\n", opc)

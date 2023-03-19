@@ -150,6 +150,9 @@ func (m *VM) Step(stdout, stderr io.Writer) error {
 		variableAddress := w.Value
 		m.directStore(variableAddress, 0)
 	case op.CSS: // pop address of the subroutine stack
+		if len(m.RS) == 0 {
+			return fmt.Errorf("%d: RS: %w", m.PC-1, ErrStackUnderflow)
+		}
 		m.RS = m.RS[:len(m.RS)-1]
 	case op.EXIT: // exit from subroutine
 		// pop the return address from the stack
