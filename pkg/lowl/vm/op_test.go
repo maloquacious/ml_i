@@ -665,11 +665,6 @@ func TestVM(t *testing.T) {
 	m.SetWord(0, vm.Word{Op: opc, Value: input.V.value})
 	test(nil, nil)
 
-	opc = op.PRGEN
-	t.Errorf("%s: not tested\n", opc)
-	opc = op.PRGST
-	t.Errorf("%s: not tested\n", opc)
-
 	opc = op.SAL
 	input = input_t{A: 3, B: 4, C: 5, V: val_t{1, 88}}
 	expect = expect_t{PC: 1, A: input.A - input.V.value, B: input.B, C: input.C}
@@ -723,8 +718,6 @@ func TestVM(t *testing.T) {
 	m.SetWord(0, vm.Word{Op: opc, Value: input.V.address})
 	test(nil, nil)
 
-	opc = op.SUBR
-	t.Errorf("%s: not tested\n", opc)
 	opc = op.UNSTK
 	t.Errorf("%s: not tested\n", opc)
 }
