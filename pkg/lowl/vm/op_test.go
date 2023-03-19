@@ -165,6 +165,7 @@ func TestVM(t *testing.T) {
 
 	opc = op.BMOVE
 	t.Errorf("%s: not tested\n", opc)
+
 	opc = op.BSTK
 	t.Errorf("%s: not tested\n", opc)
 
@@ -176,89 +177,100 @@ func TestVM(t *testing.T) {
 	test(nil, nil)
 
 	opc = op.CAI
-	input = input_t{A: 7, B: 4, C: 5, V: val_t{1, 8}}
-	expect = expect_t{PC: 1, A: input.A, B: input.B, C: input.C, V: input.V, Cmp: vm.IS_LT}
-	newvm()
-	m.SetWord(0, vm.Word{Op: opc, Value: input.V.address})
-	test(nil, nil)
-	input = input_t{A: 8, B: 4, C: 5, V: val_t{1, 8}}
-	expect = expect_t{PC: 1, A: input.A, B: input.B, C: input.C, V: input.V, Cmp: vm.IS_EQ}
-	newvm()
-	m.SetWord(0, vm.Word{Op: opc, Value: input.V.address})
-	test(nil, nil)
-	input = input_t{A: 9, B: 4, C: 5, V: val_t{1, 8}}
-	expect = expect_t{PC: 1, A: input.A, B: input.B, C: input.C, V: input.V, Cmp: vm.IS_GR}
-	newvm()
-	m.SetWord(0, vm.Word{Op: opc, Value: input.V.address})
-	test(nil, nil)
+	for _, tc := range []struct {
+		a, i int
+		cmp  vm.CMPRSLT
+	}{
+		{23, 29, vm.IS_LT},
+		{29, 29, vm.IS_EQ},
+		{31, 29, vm.IS_GR},
+	} {
+		input = input_t{A: tc.a, B: 4, C: 5, V: val_t{1, 8}, V2: val_t{8, tc.i}}
+		expect = expect_t{PC: 1, A: input.A, B: input.B, C: input.C, V: input.V, V2: input.V2, Cmp: tc.cmp}
+		newvm()
+		m.SetWord(0, vm.Word{Op: opc, Value: input.V.address})
+		test(nil, nil)
+	}
 
 	opc = op.CAL
-	input = input_t{A: 7, B: 4, C: 5, V: val_t{0, 8}}
-	expect = expect_t{PC: 1, A: input.A, B: input.B, C: input.C, V: input.V, Cmp: vm.IS_LT}
-	newvm()
-	m.SetWord(0, vm.Word{Op: opc, Value: input.V.value})
-	test(nil, nil)
-	input = input_t{A: 8, B: 4, C: 5, V: val_t{0, 8}}
-	expect = expect_t{PC: 1, A: input.A, B: input.B, C: input.C, V: input.V, Cmp: vm.IS_EQ}
-	newvm()
-	m.SetWord(0, vm.Word{Op: opc, Value: input.V.value})
-	test(nil, nil)
-	input = input_t{A: 9, B: 4, C: 5, V: val_t{0, 8}}
-	expect = expect_t{PC: 1, A: input.A, B: input.B, C: input.C, V: input.V, Cmp: vm.IS_GR}
-	newvm()
-	m.SetWord(0, vm.Word{Op: opc, Value: input.V.value})
-	test(nil, nil)
+	for _, tc := range []struct {
+		a, i int
+		cmp  vm.CMPRSLT
+	}{
+		{23, 29, vm.IS_LT},
+		{29, 29, vm.IS_EQ},
+		{31, 29, vm.IS_GR},
+	} {
+		input = input_t{A: tc.a, B: 4, C: 5, V: val_t{1, tc.i}}
+		expect = expect_t{PC: 1, A: input.A, B: input.B, C: input.C, V: input.V, Cmp: tc.cmp}
+		newvm()
+		m.SetWord(0, vm.Word{Op: opc, Value: input.V.value})
+		test(nil, nil)
+	}
 
 	opc = op.CAV
-	input = input_t{A: 0, B: 4, C: 5, V: val_t{1, -5}}
-	expect = expect_t{PC: 1, A: input.A, B: input.B, C: input.C, V: input.V, Cmp: vm.IS_LT}
-	newvm()
-	m.SetWord(0, vm.Word{Op: opc, Value: input.V.address})
-	test(nil, nil)
-	input = input_t{A: 1, B: 4, C: 5, V: val_t{1, 18}}
-	expect = expect_t{PC: 1, A: input.A, B: input.B, C: input.C, V: input.V, Cmp: vm.IS_EQ}
-	newvm()
-	m.SetWord(0, vm.Word{Op: opc, Value: input.V.address})
-	test(nil, nil)
-	input = input_t{A: 2, B: 4, C: 5, V: val_t{1, 8}}
-	expect = expect_t{PC: 1, A: input.A, B: input.B, C: input.C, V: input.V, Cmp: vm.IS_GR}
-	newvm()
-	m.SetWord(0, vm.Word{Op: opc, Value: input.V.address})
-	test(nil, nil)
+	for _, tc := range []struct {
+		a, i int
+		cmp  vm.CMPRSLT
+	}{
+		{23, 29, vm.IS_LT},
+		{29, 29, vm.IS_EQ},
+		{31, 29, vm.IS_GR},
+	} {
+		input = input_t{A: tc.a, B: 4, C: 5, V: val_t{1, tc.i}}
+		expect = expect_t{PC: 1, A: input.A, B: input.B, C: input.C, V: input.V, Cmp: tc.cmp}
+		newvm()
+		m.SetWord(0, vm.Word{Op: opc, Value: input.V.address})
+		test(nil, nil)
+	}
 
 	opc = op.CCI
-	input = input_t{A: 9, B: 4, C: 7, V: val_t{1, 8}}
-	expect = expect_t{PC: 1, A: input.A, B: input.B, C: input.C, V: input.V, Cmp: vm.IS_LT}
-	newvm()
-	m.SetWord(0, vm.Word{Op: opc, Value: input.V.address})
-	test(nil, nil)
-	input = input_t{A: 18, B: 4, C: 8, V: val_t{1, 8}}
-	expect = expect_t{PC: 1, A: input.A, B: input.B, C: input.C, V: input.V, Cmp: vm.IS_EQ}
-	newvm()
-	m.SetWord(0, vm.Word{Op: opc, Value: input.V.address})
-	test(nil, nil)
-	input = input_t{A: 3, B: 4, C: 9, V: val_t{1, 8}}
-	expect = expect_t{PC: 1, A: input.A, B: input.B, C: input.C, V: input.V, Cmp: vm.IS_GR}
-	newvm()
-	m.SetWord(0, vm.Word{Op: opc, Value: input.V.address})
-	test(nil, nil)
+	for _, tc := range []struct {
+		c, i int
+		cmp  vm.CMPRSLT
+	}{
+		{23, 29, vm.IS_LT},
+		{29, 29, vm.IS_EQ},
+		{31, 29, vm.IS_GR},
+	} {
+		input = input_t{A: 13, B: 4, C: tc.c, V: val_t{1, 8}, V2: val_t{8, tc.i}}
+		expect = expect_t{PC: 1, A: input.A, B: input.B, C: input.C, V: input.V, V2: input.V2, Cmp: tc.cmp}
+		newvm()
+		m.SetWord(0, vm.Word{Op: opc, Value: input.V.address})
+		test(nil, nil)
+	}
+
+	opc = op.CCL
+	for _, tc := range []struct {
+		c, i int
+		cmp  vm.CMPRSLT
+	}{
+		{23, 29, vm.IS_LT},
+		{29, 29, vm.IS_EQ},
+		{31, 29, vm.IS_GR},
+	} {
+		input = input_t{A: 15, B: 4, C: tc.c, V: val_t{1, tc.i}}
+		expect = expect_t{PC: 1, A: input.A, B: input.B, C: input.C, V: input.V, Cmp: tc.cmp}
+		newvm()
+		m.SetWord(0, vm.Word{Op: opc, Value: input.V.value})
+		test(nil, nil)
+	}
 
 	opc = op.CCN
-	input = input_t{A: 17, B: 4, C: 7, V: val_t{0, 8}}
-	expect = expect_t{PC: 1, A: input.A, B: input.B, C: input.C, V: input.V, Cmp: vm.IS_LT}
-	newvm()
-	m.SetWord(0, vm.Word{Op: opc, Value: input.V.value})
-	test(nil, nil)
-	input = input_t{A: 38, B: 4, C: 8, V: val_t{0, 8}}
-	expect = expect_t{PC: 1, A: input.A, B: input.B, C: input.C, V: input.V, Cmp: vm.IS_EQ}
-	newvm()
-	m.SetWord(0, vm.Word{Op: opc, Value: input.V.value})
-	test(nil, nil)
-	input = input_t{A: -99, B: 4, C: 9, V: val_t{0, 8}}
-	expect = expect_t{PC: 1, A: input.A, B: input.B, C: input.C, V: input.V, Cmp: vm.IS_GR}
-	newvm()
-	m.SetWord(0, vm.Word{Op: opc, Value: input.V.value})
-	test(nil, nil)
+	for _, tc := range []struct {
+		c, i int
+		cmp  vm.CMPRSLT
+	}{
+		{23, 29, vm.IS_LT},
+		{29, 29, vm.IS_EQ},
+		{31, 29, vm.IS_GR},
+	} {
+		input = input_t{A: 15, B: 4, C: tc.c, V: val_t{1, tc.i}}
+		expect = expect_t{PC: 1, A: input.A, B: input.B, C: input.C, V: input.V, Cmp: tc.cmp}
+		newvm()
+		m.SetWord(0, vm.Word{Op: opc, Value: input.V.value})
+		test(nil, nil)
+	}
 
 	opc = op.CFSTK
 	t.Errorf("%s: not tested\n", opc)

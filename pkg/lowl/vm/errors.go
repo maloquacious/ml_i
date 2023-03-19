@@ -10,6 +10,7 @@ var (
 	ErrCycles         = fmt.Errorf("too many cycles")
 	ErrHalted         = fmt.Errorf("halted")
 	ErrInvalidOp      = fmt.Errorf("invalid op")
+	ErrNotImplemented = fmt.Errorf("not implemented")
 	ErrQuit           = fmt.Errorf("quit")
 	ErrStackOverflow  = fmt.Errorf("stack overflow")
 	ErrStackUnderflow = fmt.Errorf("stack underflow")
