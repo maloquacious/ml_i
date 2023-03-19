@@ -19,6 +19,19 @@ func (m *VM) Step(stdout, stderr io.Writer) error {
 	w := m.Core[m.PC]
 	m.PC = m.PC + 1
 
+	memcpy := func(src, dst, length int) {
+		// SRCPT points at the start of the source field.
+		// DSTPT points to the start of the destination field.
+		// Register A contains the length of the field (number of words to move)
+		tmp := make([]Word, length, length)
+		for offset := 0; offset < length; offset++ {
+			tmp[offset] = m.Core[src+offset]
+		}
+		for offset := 0; offset < length; offset++ {
+			m.Core[dst+offset] = tmp[offset]
+		}
+	}
+
 	switch w.Op {
 	case op.AAL: // add a literal value to register A
 		literalValue := w.Value
@@ -42,15 +55,7 @@ func (m *VM) Step(stdout, stderr io.Writer) error {
 		// SRCPT points at the start of the source field.
 		// DSTPT points to the start of the destination field.
 		// Register A contains the length of the field (number of words to move)
-		src, dst, length := m.directLoad(w.Value), m.directLoad(w.ValueTwo), m.A
-		tmp := make([]Word, length, length)
-		for offset := 0; offset < length; offset++ {
-			tmp[offset] = m.Core[src+offset]
-		}
-		for offset := 0; offset < length; offset++ {
-			m.Core[dst+offset] = tmp[offset]
-		}
-
+		memcpy(m.directLoad(w.Value), m.directLoad(w.ValueTwo), m.A)
 	case op.BSTK: // stack A on backwards stack
 		// preserve A
 		a := m.A
@@ -163,14 +168,7 @@ func (m *VM) Step(stdout, stderr io.Writer) error {
 		// SRCPT points at the start of the source field.
 		// DSTPT points to the start of the destination field.
 		// Register A contains the length of the field (number of words to move)
-		src, dst, length := m.directLoad(w.Value), m.directLoad(w.ValueTwo), m.A
-		tmp := make([]Word, length, length)
-		for offset := 0; offset < length; offset++ {
-			tmp[offset] = m.Core[src+offset]
-		}
-		for offset := 0; offset < length; offset++ {
-			m.Core[dst+offset] = tmp[offset]
-		}
+		memcpy(m.directLoad(w.Value), m.directLoad(w.ValueTwo), m.A)
 	case op.FSTK: // stack A on forwards stack
 		// STI   FFPT     // store A in address pointed at by FFPT
 		valueToStore := m.A

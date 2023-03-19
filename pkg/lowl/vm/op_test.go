@@ -44,6 +44,7 @@ func TestVM(t *testing.T) {
 	var input input_t
 	var expect expect_t
 	var out *bytes.Buffer
+	var buf []byte
 
 	newvm := func() {
 		m = &vm.VM{PC: input.PC, A: input.A, B: input.B, C: input.C}
@@ -176,7 +177,62 @@ func TestVM(t *testing.T) {
 	test(nil, nil)
 
 	opc = op.BMOVE
-	t.Errorf("%s: not tested\n", opc)
+	input = input_t{}
+	expect = expect_t{PC: 1}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc})
+	test(nil, nil)
+	buf = []byte{}
+	input = input_t{A: len(buf), V: val_t{address: 1, value: 16}, V2: val_t{address: 2, value: 21}}
+	expect = expect_t{PC: 1, A: len(buf)}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: input.V.address, ValueTwo: input.V2.address})
+	m.SetWord(input.V.address, vm.Word{Value: input.V.value})
+	m.SetWord(input.V2.address, vm.Word{Value: input.V2.value})
+	for n, ch := range buf {
+		m.SetWord(input.V.value+n, vm.Word{Value: int(ch)})
+	}
+	test(nil, nil)
+	for n, want := range buf {
+		got := byte(m.Core[input.V2.value+n].Value)
+		if got != want {
+			t.Errorf("%s: [%d]: want %d: got %d\n", opc, n, want, got)
+		}
+	}
+	buf = []byte{138}
+	input = input_t{A: len(buf), V: val_t{address: 1, value: 16}, V2: val_t{address: 2, value: 21}}
+	expect = expect_t{PC: 1, A: len(buf)}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: input.V.address, ValueTwo: input.V2.address})
+	m.SetWord(input.V.address, vm.Word{Value: input.V.value})
+	m.SetWord(input.V2.address, vm.Word{Value: input.V2.value})
+	for n, ch := range buf {
+		m.SetWord(input.V.value+n, vm.Word{Value: int(ch)})
+	}
+	test(nil, nil)
+	for n, want := range buf {
+		got := byte(m.Core[input.V2.value+n].Value)
+		if got != want {
+			t.Errorf("%s: [%d]: want %d: got %d\n", opc, n, want, got)
+		}
+	}
+	buf = []byte{98, 97, 4, 3, 2, 1, 0}
+	input = input_t{A: len(buf), V: val_t{address: 1, value: 16}, V2: val_t{address: 2, value: 21}}
+	expect = expect_t{PC: 1, A: len(buf)}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: input.V.address, ValueTwo: input.V2.address})
+	m.SetWord(input.V.address, vm.Word{Value: input.V.value})
+	m.SetWord(input.V2.address, vm.Word{Value: input.V2.value})
+	for n, ch := range buf {
+		m.SetWord(input.V.value+n, vm.Word{Value: int(ch)})
+	}
+	test(nil, nil)
+	for n, want := range buf {
+		got := byte(m.Core[input.V2.value+n].Value)
+		if got != want {
+			t.Errorf("%s: [%d]: want %d: got %d\n", opc, n, want, got)
+		}
+	}
 
 	opc = op.BSTK
 	t.Errorf("%s: not tested\n", opc)
@@ -345,8 +401,65 @@ func TestVM(t *testing.T) {
 
 	opc = op.EXIT
 	t.Errorf("%s: not tested\n", opc)
+
 	opc = op.FMOVE
-	t.Errorf("%s: not tested\n", opc)
+	input = input_t{}
+	expect = expect_t{PC: 1}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc})
+	test(nil, nil)
+	buf = []byte{}
+	input = input_t{A: len(buf), V: val_t{address: 1, value: 16}, V2: val_t{address: 2, value: 21}}
+	expect = expect_t{PC: 1, A: len(buf)}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: input.V.address, ValueTwo: input.V2.address})
+	m.SetWord(input.V.address, vm.Word{Value: input.V.value})
+	m.SetWord(input.V2.address, vm.Word{Value: input.V2.value})
+	for n, ch := range buf {
+		m.SetWord(input.V.value+n, vm.Word{Value: int(ch)})
+	}
+	test(nil, nil)
+	for n, want := range buf {
+		got := byte(m.Core[input.V2.value+n].Value)
+		if got != want {
+			t.Errorf("%s: [%d]: want %d: got %d\n", opc, n, want, got)
+		}
+	}
+	buf = []byte{48}
+	input = input_t{A: len(buf), V: val_t{address: 1, value: 16}, V2: val_t{address: 2, value: 21}}
+	expect = expect_t{PC: 1, A: len(buf)}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: input.V.address, ValueTwo: input.V2.address})
+	m.SetWord(input.V.address, vm.Word{Value: input.V.value})
+	m.SetWord(input.V2.address, vm.Word{Value: input.V2.value})
+	for n, ch := range buf {
+		m.SetWord(input.V.value+n, vm.Word{Value: int(ch)})
+	}
+	test(nil, nil)
+	for n, want := range buf {
+		got := byte(m.Core[input.V2.value+n].Value)
+		if got != want {
+			t.Errorf("%s: [%d]: want %d: got %d\n", opc, n, want, got)
+		}
+	}
+	buf = []byte{1, 2, 3}
+	input = input_t{A: len(buf), V: val_t{address: 1, value: 16}, V2: val_t{address: 2, value: 21}}
+	expect = expect_t{PC: 1, A: len(buf)}
+	newvm()
+	m.SetWord(0, vm.Word{Op: opc, Value: input.V.address, ValueTwo: input.V2.address})
+	m.SetWord(input.V.address, vm.Word{Value: input.V.value})
+	m.SetWord(input.V2.address, vm.Word{Value: input.V2.value})
+	for n, ch := range buf {
+		m.SetWord(input.V.value+n, vm.Word{Value: int(ch)})
+	}
+	test(nil, nil)
+	for n, want := range buf {
+		got := byte(m.Core[input.V2.value+n].Value)
+		if got != want {
+			t.Errorf("%s: [%d]: want %d: got %d\n", opc, n, want, got)
+		}
+	}
+
 	opc = op.FSTK
 	t.Errorf("%s: not tested\n", opc)
 
