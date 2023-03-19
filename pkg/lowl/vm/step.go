@@ -55,7 +55,9 @@ func (m *VM) Step(stdout, stderr io.Writer) error {
 	case op.CAL: // compare register A with number
 		m.compare(m.A, w.Value)
 	case op.CAV: // compare address of V with register A
-		m.compare(m.A, w.Value)
+		//printf(stdout, "CAV A %d -> V %d *v %d\n", m.A, w.Value, m.Core[w.Value].Value)
+		//m.compare(m.A, w.Value)
+		m.compare(m.A, m.directLoad(w.Value))
 	case op.CCI: // compare contents of address pointed to by V to register C
 		m.compare(m.C, m.directLoad(w.Value))
 	case op.CCL: // compare register C with a number
@@ -160,6 +162,7 @@ func (m *VM) Step(stdout, stderr io.Writer) error {
 	case op.LAI: // load contents of variable V into register A
 		m.A = m.indirectLoad(w.Value)
 	case op.LAL: // load number into register A
+		//printf(stdout, "LAL %d -> A\n", w.Value)
 		m.A = w.Value
 	case op.LAM: // load contents of address pointed to by register B + N-OF into register A
 		m.A = m.indexedLoad(w.Value)
