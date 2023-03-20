@@ -79,8 +79,7 @@ func (i IABx) String() string {
 // The bias is half the maximum integer that can be stored by Bx.
 // Bx is 18 bits and has a maximum value of 0x3_FFFF, so the bias is 0x3_FFFF / 2.
 // A value of -1 will be encoded as (-1 + bias), which is 0x1_FFFE.
-const SBxMin, SBxMax = -131071, 131071
-const SBxBias = 0x0003_FFFF >> 1
+const sBxBias = 0x0003_FFFF >> 1
 
 type IAsBx struct {
 	Op  byte // unsigned 6-bit field
@@ -89,14 +88,14 @@ type IAsBx struct {
 }
 
 func EncodeAsBx(i IAsBx) Word {
-	return Word((((uint32(i.Op) << 8) + uint32(i.A)) << 18) + uint32(i.SBx+SBxBias))
+	return Word((((uint32(i.Op) << 8) + uint32(i.A)) << 18) + uint32(i.SBx+sBxBias))
 }
 
 func DecodeAsBx(w Word) IAsBx {
 	return IAsBx{
 		Op:  byte((w & 0xFC00_0000) >> 26),
 		A:   byte((w & 0x03FC_0000) >> 18),
-		SBx: int(w&0x0003_FFFF) - SBxBias,
+		SBx: int(w&0x0003_FFFF) - sBxBias,
 	}
 }
 

@@ -19,5 +19,6 @@
 .env
 .env.*
 .idea/
+lua/
 notes.txt
 site/
